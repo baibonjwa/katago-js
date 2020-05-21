@@ -55,6 +55,7 @@ NNServerBuf::~NNServerBuf() {
 NNEvaluator::NNEvaluator(
   const string& mName,
   const string& mFileName,
+  ConfigParser& cfg,
   Logger* lg,
   int maxBatchSize,
   int maxConcurrentEvals,
@@ -141,7 +142,7 @@ NNEvaluator::NNEvaluator(
     modelVersion = NeuralNet::getModelVersion(loadedModel);
     inputsVersion = NNModelVersion::getInputsVersion(modelVersion);
     computeContext = NeuralNet::createComputeContext(
-      gpuIdxs,logger,nnXLen,nnYLen,openCLTunerFile,openCLReTunePerBoardSize,usingFP16Mode,usingNHWCMode,loadedModel
+      gpuIdxs,cfg,logger,nnXLen,nnYLen,openCLTunerFile,openCLReTunePerBoardSize,usingFP16Mode,usingNHWCMode,loadedModel
     );
   }
   else {

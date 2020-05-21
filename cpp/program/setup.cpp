@@ -247,6 +247,7 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
     NNEvaluator* nnEval = new NNEvaluator(
       nnModelName,
       nnModelFile,
+      cfg,
       &logger,
       nnMaxBatchSize,
       maxConcurrentEvals,

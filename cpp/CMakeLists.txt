@@ -150,7 +150,7 @@ add_executable(katago
   dataio/numpywrite.cpp
   dataio/trainingwrite.cpp
   dataio/loadmodel.cpp
-  dataio/lzparse.cpp
+  #dataio/lzparse.cpp
   dataio/homedata.cpp
   neuralnet/nninputs.cpp
   neuralnet/modelversion.cpp
@@ -180,9 +180,9 @@ add_executable(katago
   tests/testsgf.cpp
   tests/testnninputs.cpp
   tests/testownership.cpp
-  tests/testsearch.cpp
+  #tests/testsearch.cpp
   tests/testtime.cpp
-  tests/testtrainingwrite.cpp
+  #tests/testtrainingwrite.cpp
   tests/testnn.cpp
   command/commandline.cpp
   command/analysis.cpp
@@ -219,6 +219,7 @@ elseif(USE_BACKEND STREQUAL "OPENCL")
   target_link_libraries (katago ${OpenCL_LIBRARY})
 elseif(USE_BACKEND STREQUAL "TFJS")
   target_compile_definitions(katago PRIVATE USE_TFJS_BACKEND)
+  include_directories(/usr/local/include)
 endif()
 
 if(NO_GIT_REVISION)
@@ -282,16 +283,16 @@ if(MSVC)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:8388608")
 endif()
 
+# for emcc
+if(USE_BACKEND STREQUAL "TFJS")
+  target_compile_definitions(katago PRIVATE BYTE_ORDER=1234)
+  target_compile_definitions(katago PRIVATE LITTLE_ENDIAN=1234)
+  target_compile_definitions(katago PRIVATE BIG_ENDIAN=4321)
+endif()
+
 if(CMAKE_COMPILER_IS_GNUCC)
   if(NOT (${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm"))
     set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -mfpmath=sse")
-  endif()
-
-  # for emcc
-  if(USE_BACKEND STREQUAL "TFJS")
-    target_compile_definitions(katago PRIVATE BYTE_ORDER=1234)
-    target_compile_definitions(katago PRIVATE LITTLE_ENDIAN=1234)
-    target_compile_definitions(katago PRIVATE BIG_ENDIAN=4321)
   endif()
 
   # On g++ it seems like we need to explicitly link threads as well.

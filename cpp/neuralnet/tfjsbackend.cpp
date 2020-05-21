@@ -19,6 +19,8 @@ using namespace std;
 
 struct ComputeContext {
   int backend = 0; // auto: 0, cpu: 1, webgl: 2
+  int nnXLen;
+  int nnYLen;
 
   ComputeContext(ConfigParser& cfg, Logger* logger) {
     if(cfg.contains("tfjsBackend")) {
@@ -191,6 +193,10 @@ ComputeContext* NeuralNet::createComputeContext(
   Logger* logger,
   int nnXLen,
   int nnYLen,
+  std::string openCLTunerFile,
+  bool openCLReTunePerBoardSize,
+  enabled_t useFP16Mode,
+  enabled_t useNHWCMode,
   const LoadedModel* loadedModel
 ) {
   return new ComputeContext(cfg, logger);
@@ -200,7 +206,7 @@ void NeuralNet::freeComputeContext(ComputeContext* computeContext) {
   (void)computeContext;
 }
 
-LoadedModel* NeuralNet::loadModelFile(const string& file, int modelFileIdx) {
+LoadedModel* NeuralNet::loadModelFile(const string& file) {
   return new LoadedModel(file);
 }
 
@@ -221,23 +227,17 @@ ComputeHandle* NeuralNet::createComputeHandle(
   const LoadedModel* loadedModel,
   Logger* logger,
   int maxBatchSize,
-  int nnXLen,
-  int nnYLen,
   bool requireExactNNLen,
   bool inputsUseNHWC,
-  int gpuIdxForThisThread,
-  bool useFP16,
-  bool cudaUseNHWC
+  int gpuIdxForThisThread
 ) {
   (void)maxBatchSize;
   (void)requireExactNNLen;
   (void)inputsUseNHWC;
   (void)gpuIdxForThisThread;
-  (void)useFP16;
-  (void)cudaUseNHWC;
   setBackend(context->backend);
   if (downloadModel((int)loadedModel->name.c_str()) == 1) {
-    return new ComputeHandle(loadedModel, nnXLen, nnYLen);
+    return new ComputeHandle(loadedModel, context->nnXLen, context->nnYLen);
   } else {
     logger->write("Failed downloadModel");
     return NULL;

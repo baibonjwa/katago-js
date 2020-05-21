@@ -73,6 +73,7 @@ static int handleSubcommand(const string& subcommand, int argc, const char* argv
   #if !defined(__EMSCRIPTEN__)
   else if(subcommand == "gatekeeper")
     return MainCmds::gatekeeper(argc-1,&argv[1]);
+  #endif
   else if(subcommand == "genconfig")
     return MainCmds::genconfig(argc-1,&argv[1],argv[0]);
   else if(subcommand == "gtp")
@@ -110,6 +111,7 @@ static int handleSubcommand(const string& subcommand, int argc, const char* argv
     return MainCmds::runsekitrainwritetests(argc-1,&argv[1]);
   else if(subcommand == "runnnonmanyposestest")
     return MainCmds::runnnonmanyposestest(argc-1,&argv[1]);
+  #endif
   else if(subcommand == "dataminesgfs")
     return MainCmds::dataminesgfs(argc-1,&argv[1]);
   else if(subcommand == "lzcost")
