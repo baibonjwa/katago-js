@@ -29,6 +29,10 @@ uint64_t Hash::basicLCong(uint64_t x)
 {
   return 2862933555777941757ULL*x + 3037000493ULL;
 }
+uint64_t Hash::basicLCong2(uint64_t x)
+{
+  return 6364136223846793005ULL*x + 1442695040888963407ULL;
+}
 
 //MurmurHash3 finalization - good avalanche properties
 //Reversible, but maps 0 -> 0
@@ -40,6 +44,15 @@ uint64_t Hash::murmurMix(uint64_t x)
   x *= 0xc4ceb9fe1a85ec53ULL;
   x ^= x >> 33;
   return x;
+}
+
+//Splitmix64 mixing step
+uint64_t Hash::splitMix64(uint64_t x)
+{
+  x = x + 0x9e3779b97f4a7c15ULL;
+  x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+  x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+  return x ^ (x >> 31);
 }
 
 //Robert Jenkins' 96 bit Mix Function
@@ -120,5 +133,3 @@ ostream& operator<<(ostream& out, const Hash128 other)
       << Global::uint64ToHexString(other.hash0);
   return out;
 }
-
-

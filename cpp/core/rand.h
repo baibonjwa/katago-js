@@ -72,6 +72,8 @@ class Rand
   uint32_t nextUInt(const int* freq, size_t n);
   //Returns a random integer according to the given unnormalized probability distribution
   uint32_t nextUInt(const double* relProbs, size_t n);
+  //Returns a random integer according to the given unnormalized cumulative probability distribution
+  size_t nextIndexCumulative(const double* cumRelProbs, size_t n);
 
   //SIGNED INTEGER---------------------------------------
 
@@ -277,7 +279,7 @@ inline double Rand::nextGaussian()
 inline double Rand::nextExponential()
 {
   double r = 0.0;
-  while(r <= 1e-16)
+  while(r <= 1e-17)
     r = nextDouble();
   return -log(r);
 }

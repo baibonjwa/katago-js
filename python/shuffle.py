@@ -17,13 +17,14 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python_io import TFRecordOptions,TFRecordCompressionType,TFRecordWriter
 
+import tfrecordio
+
 keys = [
   "binaryInputNCHWPacked",
   "globalInputNC",
   "policyTargetsNCMove",
   "globalTargetsNC",
   "scoreDistrN",
-  "selfBonusScoreN",
   "valueTargetsNCHW"
 ]
 
@@ -53,18 +54,15 @@ def shardify(input_idx, input_file, num_out_files, out_tmp_dirs, keep_prob):
   policyTargetsNCMove = npz["policyTargetsNCMove"]
   globalTargetsNC = npz["globalTargetsNC"]
   scoreDistrN = npz["scoreDistrN"]
-  selfBonusScoreN = npz["selfBonusScoreN"]
   valueTargetsNCHW = npz["valueTargetsNCHW"]
 
-  #print("Shardify shuffling... (mem usage %dMB)" % memusage_mb())
-  joint_shuffle((binaryInputNCHWPacked,globalInputNC,policyTargetsNCMove,globalTargetsNC,scoreDistrN,selfBonusScoreN,valueTargetsNCHW))
+  joint_shuffle((binaryInputNCHWPacked,globalInputNC,policyTargetsNCMove,globalTargetsNC,scoreDistrN,valueTargetsNCHW))
 
   num_rows_to_keep = binaryInputNCHWPacked.shape[0]
   assert(globalInputNC.shape[0] == num_rows_to_keep)
   assert(policyTargetsNCMove.shape[0] == num_rows_to_keep)
   assert(globalTargetsNC.shape[0] == num_rows_to_keep)
   assert(scoreDistrN.shape[0] == num_rows_to_keep)
-  assert(selfBonusScoreN.shape[0] == num_rows_to_keep)
   assert(valueTargetsNCHW.shape[0] == num_rows_to_keep)
 
   if keep_prob < 1.0:
@@ -86,13 +84,11 @@ def shardify(input_idx, input_file, num_out_files, out_tmp_dirs, keep_prob):
       policyTargetsNCMove = policyTargetsNCMove[start:stop],
       globalTargetsNC = globalTargetsNC[start:stop],
       scoreDistrN = scoreDistrN[start:stop],
-      selfBonusScoreN = selfBonusScoreN[start:stop],
       valueTargetsNCHW = valueTargetsNCHW[start:stop]
     )
   return num_out_files
 
-def merge_shards(filename, num_shards_to_merge, out_tmp_dir, batch_size):
-  #print("Merging shards for output file: %s (%d shards to merge)" % (filename,num_shards_to_merge))
+def merge_shards(filename, num_shards_to_merge, out_tmp_dir, batch_size, ensure_batch_multiple):
   tfoptions = TFRecordOptions(TFRecordCompressionType.ZLIB)
   record_writer = TFRecordWriter(filename,tfoptions)
 
@@ -101,13 +97,10 @@ def merge_shards(filename, num_shards_to_merge, out_tmp_dir, batch_size):
   policyTargetsNCMoves = []
   globalTargetsNCs = []
   scoreDistrNs = []
-  selfBonusScoreNs = []
   valueTargetsNCHWs = []
 
   for input_idx in range(num_shards_to_merge):
     shard_filename = os.path.join(out_tmp_dir, str(input_idx) + ".npz")
-    #print("Merge loading shard: %d (mem usage %dMB)" % (input_idx,memusage_mb()))
-
     npz = np.load(shard_filename)
     assert(set(npz.keys()) == set(keys))
 
@@ -116,7 +109,6 @@ def merge_shards(filename, num_shards_to_merge, out_tmp_dir, batch_size):
     policyTargetsNCMove = npz["policyTargetsNCMove"].astype(np.float32)
     globalTargetsNC = npz["globalTargetsNC"]
     scoreDistrN = npz["scoreDistrN"].astype(np.float32)
-    selfBonusScoreN = npz["selfBonusScoreN"].astype(np.float32)
     valueTargetsNCHW = npz["valueTargetsNCHW"].astype(np.float32)
 
     binaryInputNCHWPackeds.append(binaryInputNCHWPacked)
@@ -124,61 +116,42 @@ def merge_shards(filename, num_shards_to_merge, out_tmp_dir, batch_size):
     policyTargetsNCMoves.append(policyTargetsNCMove)
     globalTargetsNCs.append(globalTargetsNC)
     scoreDistrNs.append(scoreDistrN)
-    selfBonusScoreNs.append(selfBonusScoreN)
     valueTargetsNCHWs.append(valueTargetsNCHW)
 
   ###
   #WARNING - if adding anything here, also add it to joint_shuffle below!
   ###
-  #print("Merge concatenating... (mem usage %dMB)" % memusage_mb())
   binaryInputNCHWPacked = np.concatenate(binaryInputNCHWPackeds)
   globalInputNC = np.concatenate(globalInputNCs)
   policyTargetsNCMove = np.concatenate(policyTargetsNCMoves)
   globalTargetsNC = np.concatenate(globalTargetsNCs)
   scoreDistrN = np.concatenate(scoreDistrNs)
-  selfBonusScoreN = np.concatenate(selfBonusScoreNs)
   valueTargetsNCHW = np.concatenate(valueTargetsNCHWs)
 
-  #print("Merge shuffling... (mem usage %dMB)" % memusage_mb())
-  joint_shuffle((binaryInputNCHWPacked,globalInputNC,policyTargetsNCMove,globalTargetsNC,scoreDistrN,selfBonusScoreN,valueTargetsNCHW))
+  joint_shuffle((binaryInputNCHWPacked,globalInputNC,policyTargetsNCMove,globalTargetsNC,scoreDistrN,valueTargetsNCHW))
 
-  #print("Merge writing in batches...")
   num_rows = binaryInputNCHWPacked.shape[0]
   #Just truncate and lose the batch at the end, it's fine
-  num_batches = num_rows // batch_size
+  num_batches = (num_rows // (batch_size * ensure_batch_multiple)) * ensure_batch_multiple
   for i in range(num_batches):
     start = i*batch_size
     stop = (i+1)*batch_size
-    example = tf.train.Example(features=tf.train.Features(feature={
-      "binchwp": tf.train.Feature(
-        bytes_list=tf.train.BytesList(value=[binaryInputNCHWPacked[start:stop].reshape(-1).tobytes()])
-      ),
-      "ginc": tf.train.Feature(
-        float_list=tf.train.FloatList(value=globalInputNC[start:stop].reshape(-1))
-      ),
-      "ptncm": tf.train.Feature(
-        float_list=tf.train.FloatList(value=policyTargetsNCMove[start:stop].reshape(-1))
-      ),
-      "gtnc": tf.train.Feature(
-        float_list=tf.train.FloatList(value=globalTargetsNC[start:stop].reshape(-1))
-      ),
-      "sdn": tf.train.Feature(
-        float_list=tf.train.FloatList(value=scoreDistrN[start:stop].reshape(-1))
-      ),
-      "sbsn": tf.train.Feature(
-        float_list=tf.train.FloatList(value=selfBonusScoreN[start:stop].reshape(-1))
-      ),
-      "vtnchw": tf.train.Feature(
-        float_list=tf.train.FloatList(value=valueTargetsNCHW[start:stop].reshape(-1))
-      )
-    }))
+
+    example = tfrecordio.make_tf_record_example(
+      binaryInputNCHWPacked,
+      globalInputNC,
+      policyTargetsNCMove,
+      globalTargetsNC,
+      scoreDistrN,
+      valueTargetsNCHW,
+      start,
+      stop
+    )
     record_writer.write(example.SerializeToString())
 
   jsonfilename = os.path.splitext(filename)[0] + ".json"
   with open(jsonfilename,"w") as f:
     json.dump({"num_rows":num_rows,"num_batches":num_batches},f)
-
-  #print("Merge done %s (%d rows)" % (filename, num_batches * batch_size))
 
   record_writer.close()
   return num_batches * batch_size
@@ -187,16 +160,17 @@ def merge_shards(filename, num_shards_to_merge, out_tmp_dir, batch_size):
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Shuffle data files')
   parser.add_argument('dirs', metavar='DIR', nargs='+', help='Directories of training data files')
-  parser.add_argument('-min-rows', type=int, required=True, help='Minimum training rows to use')
-  parser.add_argument('-max-rows', type=int, required=True, help='Maximum training rows to use')
-  parser.add_argument('-keep-target-rows', type=int, required=False, help='Target number of rows to actually keep in the final data set')
+  parser.add_argument('-min-rows', type=int, required=False, help='Minimum training rows to use, default 250k')
+  parser.add_argument('-max-rows', type=int, required=False, help='Maximum training rows to use, default unbounded')
+  parser.add_argument('-keep-target-rows', type=int, required=False, help='Target number of rows to actually keep in the final data set, default 1.2M')
   parser.add_argument('-expand-window-per-row', type=float, required=True, help='Beyond min rows, initially expand the window by this much every post-random data row')
   parser.add_argument('-taper-window-exponent', type=float, required=True, help='Make the window size asymtotically grow as this power of the data rows')
   parser.add_argument('-out-dir', required=True, help='Dir to output training files')
   parser.add_argument('-out-tmp-dir', required=True, help='Dir to use as scratch space')
   parser.add_argument('-approx-rows-per-out-file', type=int, required=True, help='Number of rows per output tf records file')
   parser.add_argument('-num-processes', type=int, required=True, help='Number of multiprocessing processes')
-  parser.add_argument('-batch-size', type=int, required=True, help='Batck size to write training examples in')
+  parser.add_argument('-batch-size', type=int, required=True, help='Batch size to write training examples in')
+  parser.add_argument('-ensure-batch-multiple', type=int, required=False, help='Ensure each file is a multiple of this many batches')
 
   args = parser.parse_args()
   dirs = args.dirs
@@ -210,10 +184,20 @@ if __name__ == '__main__':
   approx_rows_per_out_file = args.approx_rows_per_out_file
   num_processes = args.num_processes
   batch_size = args.batch_size
+  ensure_batch_multiple = 1
+  if args.ensure_batch_multiple is not None:
+    ensure_batch_multiple = args.ensure_batch_multiple
+  if min_rows is None:
+    print("NOTE: -min-rows was not specified, defaulting to requiring 250K rows before shuffling.")
+    min_rows = 250000
+  if keep_target_rows is None:
+    print("NOTE: -keep-target-rows was not specified, defaulting to keeping the first 1.2M rows.")
+    print("(slightly larger than default training epoch size of 1M, to give 1 epoch of data regardless of discreteness rows or batches per output file)")
+    print("If you intended to shuffle the whole dataset instead, pass in -keep-target-rows <very large number>")
+    keep_target_rows = 1200000
 
   all_files = []
   for d in dirs:
-    print(d)
     for (path,dirnames,filenames) in os.walk(d):
       filenames = [os.path.join(path,filename) for filename in filenames if filename.endswith('.npz')]
       filenames = [(filename,os.path.getmtime(filename)) for filename in filenames]
@@ -277,11 +261,10 @@ if __name__ == '__main__':
     else:
       num_random_rows_capped = min(num_random_rows_capped + num_rows, min_rows)
 
-    #print("Training data file %s: %d rows" % (filename,num_rows))
     files_with_row_range.append((filename,row_range))
 
     #If we already have a window size bigger than max, then just stop
-    if num_desired_rows() >= max_rows:
+    if max_rows is not None and num_desired_rows() >= max_rows:
       break
 
   if os.path.exists(out_dir):
@@ -294,7 +277,7 @@ if __name__ == '__main__':
 
   #If we don't have enough rows, then quit out
   if num_rows_total < min_rows:
-    print("Not enough rows (fewer than %d)" % min_rows)
+    print("Not enough rows, only %d (fewer than %d)" % (num_rows_total,min_rows))
     sys.exit(0)
 
   print("Total rows found: %d (%d usable)" % (num_rows_total,num_usable_rows()))
@@ -305,18 +288,22 @@ if __name__ == '__main__':
   #Now assemble only the files we need to hit our desired window size
   desired_num_rows = num_desired_rows()
   desired_num_rows = max(desired_num_rows,min_rows)
-  desired_num_rows = min(desired_num_rows,max_rows)
+  desired_num_rows = min(desired_num_rows,max_rows) if max_rows is not None else desired_num_rows
   print("Desired num rows: %d / %d" % (desired_num_rows,num_rows_total))
 
   desired_input_files = []
   desired_input_files_with_row_range = []
   num_rows_total = 0
-  for (filename,(start_row,end_row)) in files_with_row_range:
+  len_files_with_row_range = len(files_with_row_range)
+  print_stride = 1 + len(files_with_row_range) // 40
+  for i in range(len(files_with_row_range)):
+    (filename,(start_row,end_row)) = files_with_row_range[i]
     desired_input_files.append(filename)
     desired_input_files_with_row_range.append((filename,(start_row,end_row)))
 
     num_rows_total += (end_row - start_row)
-    print("Using: %s (%d-%d) (%d/%d desired rows)" % (filename,start_row,end_row,num_rows_total,desired_num_rows))
+    if i % print_stride == 0 or num_rows_total >= desired_num_rows or i == len_files_with_row_range - 1:
+      print("Using: %s (%d-%d) (%d/%d desired rows)" % (filename,start_row,end_row,num_rows_total,desired_num_rows))
     if num_rows_total >= desired_num_rows:
       break
 
@@ -353,7 +340,7 @@ if __name__ == '__main__':
     ])
     t1 = time.time()
     print("Done sharding, number of shards by input file:",flush=True)
-    print(list(zip(desired_input_files,shard_results)),flush=True)
+    # print(list(zip(desired_input_files,shard_results)),flush=True)
     print("Time taken: " + str(t1-t0),flush=True)
     sys.stdout.flush()
 
@@ -361,7 +348,7 @@ if __name__ == '__main__':
     t0 = time.time()
     num_shards_to_merge = len(desired_input_files)
     merge_results = pool.starmap(merge_shards, [
-      (out_files[idx],num_shards_to_merge,out_tmp_dirs[idx],batch_size) for idx in range(len(out_files))
+      (out_files[idx],num_shards_to_merge,out_tmp_dirs[idx],batch_size,ensure_batch_multiple) for idx in range(len(out_files))
     ])
     t1 = time.time()
     print("Done merging, number of rows by output file:",flush=True)

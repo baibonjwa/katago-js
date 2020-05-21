@@ -17,14 +17,7 @@
 #include <iomanip>
 #include <sstream>
 #include <sys/types.h>
-
-//TODO this is not portable to windows, use C++17 filesystem library when C++17 is available
-//It's also actually not used for anything important, so we can gate this away
-#ifndef NO_DIRENT_H
-#include <dirent.h>
-#endif
-
-#include "global.h"
+#include <boost/filesystem.hpp>
 
 using namespace std;
 
@@ -454,7 +447,7 @@ bool Global::isDigits(const string& str)
   return isDigits(str,0,str.size());
 }
 
-bool Global::isDigits(const string& str, int start, int end)
+bool Global::isDigits(const string& str, size_t start, size_t end)
 {
   //Too long to fit in integer for sure?
   if(end <= start)
@@ -462,9 +455,9 @@ bool Global::isDigits(const string& str, int start, int end)
   if(end-start > 9)
     return false;
 
-  int size = str.size();
+  size_t size = str.size();
   int64_t value = 0;
-  for(int i = start; i<end && i<size; i++)
+  for(size_t i = start; i<end && i<size; i++)
   {
     char c = str[i];
     if(!isDigit(c))
@@ -483,7 +476,7 @@ int Global::parseDigits(const string& str)
   return parseDigits(str,0,str.size());
 }
 
-int Global::parseDigits(const string& str, int start, int end)
+int Global::parseDigits(const string& str, size_t start, size_t end)
 {
   //Too long to fit in integer for sure?
   if(end <= start)
@@ -491,9 +484,9 @@ int Global::parseDigits(const string& str, int start, int end)
   if(end-start > 9)
     throw IOError("Could not parse digits, overflow: " + str.substr(start,end-start));
 
-  int size = str.size();
+  size_t size = str.size();
   int64_t value = 0;
-  for(int i = start; i<end && i<size; i++)
+  for(size_t i = start; i<end && i<size; i++)
   {
     char c = str[i];
     if(!isDigit(c))
@@ -684,42 +677,25 @@ vector<string> Global::readFileLines(const string& filename, char delimiter)
   return readFileLines(filename.c_str(), delimiter);
 }
 
-
-//TODO this is not portable to windows, reimplement with C++17 filesystem library when C++17 is available
-#ifdef NO_DIRENT_H
-void Global::collectFiles(const string& dirname, std::function<bool(const string&)> fileFilter, vector<string>& collected) {
-  (void)dirname;
-  (void)fileFilter;
-  (void)collected;
-  throw StringError("collectFiles not implemented due to no dirent.h");
-}
-#else
 void Global::collectFiles(const string& dirname, std::function<bool(const string&)> fileFilter, vector<string>& collected)
 {
-  DIR *dir;
-  struct dirent *entry;
-
-  if(!(dir = opendir(dirname.c_str()))) {
-    cerr << "Error (" << errno << ") opening " << dirname << endl;
+  namespace bfs = boost::filesystem;
+  try {
+    for(const bfs::directory_entry& entry: bfs::recursive_directory_iterator(dirname)) {
+      if(!bfs::is_directory(entry.status())) {
+        const bfs::path& path = entry.path();
+        string fileName = path.filename().string();
+        if(fileFilter(fileName)) {
+          collected.push_back(path.string());
+        }
+      }
+    }
+  }
+  catch(const bfs::filesystem_error& e) {
+    cerr << "Error recursively collectng files: " << e.what() << endl;
     return;
   }
-
-  while ((entry = readdir(dir)) != NULL) {
-    if(entry->d_type == DT_DIR) {
-      if(strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-        continue;
-      const string subPath = dirname + "/" + entry->d_name;
-      collectFiles(subPath,fileFilter,collected);
-    }
-    else {
-      string fileName = string(entry->d_name);
-      if(fileFilter(fileName))
-        collected.push_back(dirname + "/" + fileName);
-    }
-  }
-  closedir(dir);
 }
-#endif
 
 //USER IO----------------------------
 

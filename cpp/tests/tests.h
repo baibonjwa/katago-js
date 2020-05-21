@@ -15,6 +15,7 @@ namespace Tests {
   void runBoardIOTests();
   void runBoardBasicTests();
   void runBoardUndoTest();
+  void runBoardHandicapTest();
   void runBoardStressTest();
 
   //testboardarea.cpp
@@ -36,7 +37,9 @@ namespace Tests {
   void runNNLessSearchTests();
   void runSearchTests(const std::string& modelFile, bool inputsNHWC, bool cudaNHWC, int symmetry, bool useFP16);
   void runSearchTestsV3(const std::string& modelFile, bool inputsNHWC, bool cudaNHWC, int symmetry, bool useFP16);
+  void runSearchTestsV8(const std::string& modelFile, bool inputsNHWC, bool cudaNHWC, bool useFP16);
   void runNNOnTinyBoard(const std::string& modelFile, bool inputsNHWC, bool cudaNHWC, int symmetry, bool useFP16);
+  void runNNSymmetries(const std::string& modelFile, bool inputsNHWC, bool cudaNHWC, bool useFP16);
   void runNNOnManyPoses(const std::string& modelFile, bool inputsNHWC, bool cudaNHWC, int symmetry, bool useFP16, const std::string& comparisonFile);
 
   //testtime.cpp
@@ -45,24 +48,19 @@ namespace Tests {
   //testtrainingwrite.cpp
   void runTrainingWriteTests();
   void runSelfplayInitTestsWithNN(const std::string& modelFile);
+  void runSekiTrainWriteTests(const std::string& modelFile);
+  void runMoreSelfplayTestsWithNN(const std::string& modelFile);
 
   //testnn.cpp
   void runNNLayerTests();
+
+  //testownership.cpp
+  void runOwnershipTests(const std::string& configFile, const std::string& modelFile);
 }
 
 namespace TestCommon {
-
-  inline bool boardsSeemEqual(const Board& b1, const Board& b2) {
-    for(int i = 0; i<Board::MAX_ARR_SIZE; i++)
-      if(b1.colors[i] != b2.colors[i])
-        return false;
-    if(b1.numBlackCaptures != b2.numBlackCaptures)
-      return false;
-    if(b1.numWhiteCaptures != b2.numWhiteCaptures)
-      return false;
-    return true;
-  }
-
+  bool boardsSeemEqual(const Board& b1, const Board& b2);
+  std::string getBenchmarkSGFData(int boardSize);
 }
 
 #endif

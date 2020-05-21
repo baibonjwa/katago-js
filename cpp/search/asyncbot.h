@@ -17,17 +17,21 @@ class AsyncBot {
   const Board& getRootBoard() const;
   const BoardHistory& getRootHist() const;
   Player getRootPla() const;
+  Player getPlayoutDoublingAdvantagePla() const;
   SearchParams getParams() const;
 
-  Search* getSearch();
+  //Get the search directly. If the asyncbot is doing anything asynchronous, the search MAY STILL BE RUNNING!
   const Search* getSearch() const;
+  //Get the search, after stopping and waiting to terminate any existing search
+  //Note that one still should NOT mind any threading issues using this search object and other asyncBot calls at the same time.
+  Search* getSearchStopAndWait();
 
   //Setup, same as in search.h
   //Calling any of these will stop any ongoing search, waiting for a full stop.
   void setPosition(Player pla, const Board& board, const BoardHistory& history);
-  void setRulesAndClearHistory(Rules rules, int encorePhase);
   void setKomiIfNew(float newKomi);
   void setRootPassLegal(bool b);
+  void setRootHintLoc(Loc loc);
   void setAlwaysIncludeOwnerMap(bool b);
   void setParams(SearchParams params);
   void setPlayerIfNew(Player movePla);
@@ -37,6 +41,7 @@ class AsyncBot {
   //Will stop any ongoing search, waiting for a full stop.
   //If the move is not legal for the current player, returns false and does nothing, else returns true
   bool makeMove(Loc moveLoc, Player movePla);
+  bool makeMove(Loc moveLoc, Player movePla, bool preventEncore);
   bool isLegalTolerant(Loc moveLoc, Player movePla) const;
   bool isLegalStrict(Loc moveLoc, Player movePla) const;
 
@@ -68,10 +73,13 @@ class AsyncBot {
     double callbackPeriod, std::function<void(Search* search)> callback
   );
 
-
   //Signal an ongoing genMove or ponder to stop as soon as possible, and wait for the stop to happen.
   //Safe to call even if nothing is running.
   void stopAndWait();
+  //Same, but does NOT wait for the stop. Also safe to call even if nothing is running.
+  void stopWithoutWait();
+  //Call this to permanently kill this bot and prevent future search.
+  void setKilled();
 
 
  private:

@@ -2,7 +2,10 @@
 
 #include "../core/sha2.h"
 
+#include "../external/nlohmann_json/json.hpp"
+
 using namespace std;
+using json = nlohmann::json;
 
 SgfNode::SgfNode()
   :props(NULL),move(0,0,C_EMPTY)
@@ -94,6 +97,30 @@ static Loc parseSgfLoc(const string& s, int xSize, int ySize) {
   return Location::getLoc(x,y,xSize);
 }
 
+static void parseSgfLocRectangle(const string& s, int xSize, int ySize, int& x1, int& y1, int& x2, int& y2) {
+  if(contains(s,':')) {
+    if(s.length() != 5 || s[2] != ':')
+      propertyFail("Invalid location rect: " + s);
+    x1 = parseSgfCoord(s[0]);
+    y1 = parseSgfCoord(s[1]);
+    x2 = parseSgfCoord(s[3]);
+    y2 = parseSgfCoord(s[4]);
+  }
+  else {
+    if(s.length() != 2)
+      propertyFail("Invalid location: " + s);
+
+    x1 = parseSgfCoord(s[0]);
+    y1 = parseSgfCoord(s[1]);
+    x2 = x1;
+    y2 = y1;
+  }
+  if(x1 < 0 || x1 >= xSize || y1 < 0 || y1 >= ySize ||
+     x2 < 0 || x2 >= xSize || y2 < 0 || y2 >= ySize ||
+     x1 > x2 || y1 > y2)
+    propertyFail("Invalid location or location rect: " + s);
+}
+
 static Loc parseSgfLocOrPass(const string& s, int xSize, int ySize) {
   if(s.length() == 0 || (s == "tt" && (xSize <= 19 || ySize <= 19)))
     return Board::PASS_LOC;
@@ -136,29 +163,33 @@ bool SgfNode::hasPlacements() const {
 void SgfNode::accumPlacements(vector<Move>& moves, int xSize, int ySize) const {
   if(props == NULL)
     return;
+
+  auto handleRectangleList = [&](const vector<string>& elts, Player color) {
+    size_t len = elts.size();
+    for(size_t i = 0; i<len; i++) {
+      int x1; int y1;
+      int x2; int y2;
+      parseSgfLocRectangle(elts[i],xSize,ySize,x1,y1,x2,y2);
+      for(int x = x1; x <= x2; x++) {
+        for(int y = y1; y <= y2; y++) {
+          Loc loc = Location::getLoc(x,y,xSize);
+          moves.push_back(Move(loc,color));
+        }
+      }
+    }
+  };
+
   if(contains(*props,"AB")) {
     const vector<string>& ab = map_get(*props,"AB");
-    int len = ab.size();
-    for(int i = 0; i<len; i++) {
-      Loc loc = parseSgfLoc(ab[i],xSize,ySize);
-      moves.push_back(Move(loc,P_BLACK));
-    }
+    handleRectangleList(ab,P_BLACK);
   }
   if(contains(*props,"AW")) {
     const vector<string>& aw = map_get(*props,"AW");
-    int len = aw.size();
-    for(int i = 0; i<len; i++) {
-      Loc loc = parseSgfLoc(aw[i],xSize,ySize);
-      moves.push_back(Move(loc,P_WHITE));
-    }
+    handleRectangleList(aw,P_WHITE);
   }
   if(contains(*props,"AE")) {
     const vector<string>& ae = map_get(*props,"AE");
-    int len = ae.size();
-    for(int i = 0; i<len; i++) {
-      Loc loc = parseSgfLoc(ae[i],xSize,ySize);
-      moves.push_back(Move(loc,C_EMPTY));
-    }
+    handleRectangleList(ae,C_EMPTY);
   }
 }
 
@@ -174,8 +205,8 @@ void SgfNode::accumMoves(vector<Move>& moves, int xSize, int ySize) const {
   }
   if(props != NULL && contains(*props,"B")) {
     const vector<string>& b = map_get(*props,"B");
-    int len = b.size();
-    for(int i = 0; i<len; i++) {
+    size_t len = b.size();
+    for(size_t i = 0; i<len; i++) {
       Loc loc = parseSgfLocOrPass(b[i],xSize,ySize);
       moves.push_back(Move(loc,P_BLACK));
     }
@@ -191,8 +222,8 @@ void SgfNode::accumMoves(vector<Move>& moves, int xSize, int ySize) const {
   }
   if(props != NULL && contains(*props,"W")) {
     const vector<string>& w = map_get(*props,"W");
-    int len = w.size();
-    for(int i = 0; i<len; i++) {
+    size_t len = w.size();
+    for(size_t i = 0; i<len; i++) {
       Loc loc = parseSgfLocOrPass(w[i],xSize,ySize);
       moves.push_back(Move(loc,P_WHITE));
     }
@@ -220,6 +251,17 @@ Rules SgfNode::getRulesFromRUTagOrFail() const {
   if(!suc)
     throw StringError("Could not parse rules in sgf: " + s);
   return parsed;
+}
+
+Player SgfNode::getSgfWinner() const {
+  if(!hasProperty("RE"))
+    return C_EMPTY;
+  string s = Global::toLower(getSingleProperty("RE"));
+  if(Global::isPrefix(s,"b+") || Global::isPrefix(s,"black+"))
+    return P_BLACK;
+  if(Global::isPrefix(s,"w+") || Global::isPrefix(s,"white+"))
+    return P_WHITE;
+  return C_EMPTY;
 }
 
 Sgf::Sgf()
@@ -291,9 +333,30 @@ float Sgf::getKomi() const {
   bool suc = Global::tryStringToFloat(nodes[0]->getSingleProperty("KM"), komi);
   if(!suc)
     propertyFail("Could not parse komi in sgf");
-  if(!Rules::komiIsIntOrHalfInt(komi))
-    propertyFail("Komi in sgf is not integer or half-integer");
+
+  if(!Rules::komiIsIntOrHalfInt(komi)) {
+    //Hack - if the komi is a quarter integer and it looks like a Chines GoGoD file, then double komi and accept
+    if(Rules::komiIsIntOrHalfInt(komi*2.0f) && nodes[0]->hasProperty("US") && nodes[0]->hasProperty("RU") &&
+       Global::isPrefix(nodes[0]->getSingleProperty("US"),"GoGoD") &&
+       Global::toLower(nodes[0]->getSingleProperty("RU")) == "chinese")
+      komi *= 2.0f;
+    else
+      propertyFail("Komi in sgf is not integer or half-integer");
+  }
   return komi;
+}
+
+int Sgf::getHandicapValue() const {
+  checkNonEmpty(nodes);
+  //Default, if SGF doesn't specify
+  if(!nodes[0]->hasProperty("HA"))
+    return 0;
+
+  int handicapValue = 0;
+  bool suc = Global::tryStringToInt(nodes[0]->getSingleProperty("HA"), handicapValue);
+  if(!suc)
+    propertyFail("Could not parse handicap value in sgf");
+  return handicapValue;
 }
 
 bool Sgf::hasRules() const {
@@ -345,6 +408,243 @@ void Sgf::getMovesHelper(vector<Move>& moves, int xSize, int ySize) const {
 }
 
 
+void Sgf::loadAllUniquePositions(
+  std::set<Hash128>& uniqueHashes, vector<PositionSample>& samples
+) const {
+  std::function<void(PositionSample&)> f = [&samples](PositionSample& sample) {
+    samples.push_back(sample);
+  };
+
+  iterAllUniquePositions(uniqueHashes,f);
+}
+
+void Sgf::iterAllUniquePositions(
+  std::set<Hash128>& uniqueHashes, std::function<void(PositionSample&)> f
+) const {
+  XYSize size = getXYSize();
+  int xSize = size.x;
+  int ySize = size.y;
+
+  Board board(xSize,ySize);
+  Player nextPla = nodes.size() > 0 ? nodes[0]->getPLSpecifiedColor() : C_EMPTY;
+  if(nextPla == C_EMPTY)
+    nextPla = C_BLACK;
+  Rules rules = Rules::getTrompTaylorish();
+  rules.koRule = Rules::KO_SITUATIONAL;
+  rules.multiStoneSuicideLegal = true;
+  BoardHistory hist(board,nextPla,rules,0);
+
+  PositionSample sampleBuf;
+  iterAllUniquePositionsHelper(board,hist,nextPla,rules,xSize,ySize,sampleBuf,0,uniqueHashes,f);
+}
+
+void Sgf::iterAllUniquePositionsHelper(
+  Board& board, BoardHistory& hist, Player nextPla,
+  const Rules& rules, int xSize, int ySize,
+  PositionSample& sampleBuf,
+  int initialTurnNumber,
+  std::set<Hash128>& uniqueHashes,
+  std::function<void(PositionSample&)> f
+) const {
+  vector<Move> buf;
+  for(int i = 0; i<nodes.size(); i++) {
+
+    //Handle placements
+    if(nodes[i]->hasPlacements()) {
+      buf.clear();
+      nodes[i]->accumPlacements(buf,xSize,ySize);
+      if(buf.size() > 0) {
+        int netStonesAdded = 0;
+        for(int j = 0; j<buf.size(); j++) {
+          if(board.colors[buf[j].loc] != C_EMPTY && buf[j].pla == C_EMPTY)
+            netStonesAdded--;
+          if(board.colors[buf[j].loc] == C_EMPTY && buf[j].pla != C_EMPTY)
+            netStonesAdded++;
+          board.setStone(buf[j].loc, buf[j].pla);
+        }
+        board.clearSimpleKoLoc();
+        //Clear history any time placements happen, but make sure we track the initial turn number.
+        initialTurnNumber += hist.moveHistory.size();
+
+        //If stones were net added, count each such stone as half of an initial turn.
+        //Sort of hacky, but improves the correlation between initial turn and how full the board is compared
+        //to not doing it.
+        if(netStonesAdded > 0)
+          initialTurnNumber += (netStonesAdded+1)/2;
+
+        hist.clear(board,nextPla,rules,0);
+      }
+      samplePositionIfUniqueHelper(board,hist,nextPla,sampleBuf,initialTurnNumber,uniqueHashes,f);
+    }
+
+    //Handle actual moves
+    buf.clear();
+    nodes[i]->accumMoves(buf,xSize,ySize);
+
+    for(int j = 0; j<buf.size(); j++) {
+      bool suc = hist.makeBoardMoveTolerant(board,buf[j].loc,buf[j].pla);
+      if(!suc)
+        throw StringError("Illegal move in " + fileName + " turn " + Global::intToString(j) + " move " + Location::toString(buf[j].loc, board.x_size, board.y_size));
+      nextPla = getOpp(buf[j].pla);
+      samplePositionIfUniqueHelper(board,hist,nextPla,sampleBuf,initialTurnNumber,uniqueHashes,f);
+    }
+  }
+  // if(children.size() > 1) {
+  //   cout << "IN " << children.size() << endl;
+  // }
+
+  for(int i = 0; i<children.size(); i++) {
+    Board copy = board;
+    BoardHistory histCopy = hist;
+    // if(children.size() > 1)
+    //   cout << "BEGIN " << i << "/" << children.size() << endl;
+    children[i]->iterAllUniquePositionsHelper(copy,histCopy,nextPla,rules,xSize,ySize,sampleBuf,initialTurnNumber,uniqueHashes,f);
+  }
+
+  // if(children.size() > 1) {
+  //   cout << "OUT " << children.size() << endl;
+  // }
+}
+
+void Sgf::samplePositionIfUniqueHelper(
+  Board& board, BoardHistory& hist, Player nextPla,
+  PositionSample& sampleBuf,
+  int initialTurnNumber,
+  std::set<Hash128>& uniqueHashes,
+  std::function<void(PositionSample&)> f
+) const {
+  //If the game is over or there were two consecutive passes, skip
+  if(hist.isGameFinished || (
+       hist.moveHistory.size() >= 2
+       && hist.moveHistory[hist.moveHistory.size()-1].loc == Board::PASS_LOC
+       && hist.moveHistory[hist.moveHistory.size()-2].loc == Board::PASS_LOC
+     ))
+    return;
+
+  //Hash based on position, player, and simple ko
+  Hash128 situationHash = board.pos_hash;
+  situationHash ^= Board::ZOBRIST_PLAYER_HASH[nextPla];
+  assert(hist.encorePhase == 0);
+  if(board.ko_loc != Board::NULL_LOC)
+    situationHash ^= Board::ZOBRIST_KO_LOC_HASH[board.ko_loc];
+
+  if(contains(uniqueHashes,situationHash))
+    return;
+  uniqueHashes.insert(situationHash);
+
+  //Snap the position 5 turns ago so as to include 5 moves of history.
+  assert(BoardHistory::NUM_RECENT_BOARDS > 5);
+  int turnsAgoToSnap = 0;
+  while(turnsAgoToSnap < 5) {
+    if(turnsAgoToSnap >= hist.moveHistory.size())
+      break;
+    //If a player played twice in a row, then instead snap so as not to have a move history
+    //with a double move by the same player.
+    if(turnsAgoToSnap > 0 && hist.moveHistory[hist.moveHistory.size() - turnsAgoToSnap - 1].pla == hist.moveHistory[hist.moveHistory.size() - turnsAgoToSnap].pla)
+      break;
+    if(turnsAgoToSnap == 0 && hist.moveHistory[hist.moveHistory.size() - turnsAgoToSnap - 1].pla == nextPla)
+      break;
+    turnsAgoToSnap++;
+  }
+  int startTurn = hist.moveHistory.size() - turnsAgoToSnap;
+
+  sampleBuf.board = hist.getRecentBoard(turnsAgoToSnap);
+  if(startTurn < hist.moveHistory.size())
+    sampleBuf.nextPla = hist.moveHistory[startTurn].pla;
+  else
+    sampleBuf.nextPla = nextPla;
+  sampleBuf.moves.clear();
+  for(int i = startTurn; i<hist.moveHistory.size(); i++)
+    sampleBuf.moves.push_back(hist.moveHistory[i]);
+  sampleBuf.initialTurnNumber = initialTurnNumber + startTurn;
+  sampleBuf.hintLoc = Board::NULL_LOC;
+  f(sampleBuf);
+}
+
+static uint64_t parseHex64(const string& str) {
+  assert(str.length() == 16);
+  uint64_t x = 0;
+  for(int i = 0; i<16; i++) {
+    x *= 16;
+    if(str[i] >= '0' && str[i] <= '9')
+      x += str[i] - '0';
+    else if(str[i] >= 'a' && str[i] <= 'f')
+      x += str[i] - 'a' + 10;
+    else if(str[i] >= 'A' && str[i] <= 'F')
+      x += str[i] - 'A' + 10;
+    else
+      assert(false);
+  }
+  return x;
+}
+
+set<Hash128> Sgf::readExcludes(const vector<string>& files) {
+  set<Hash128> excludeHashes;
+  for(int i = 0; i<files.size(); i++) {
+    string excludeHashesFile = Global::trim(files[i]);
+    if(excludeHashesFile.size() <= 0)
+      continue;
+    vector<string> hashes = Global::readFileLines(excludeHashesFile,'\n');
+    for(int64_t j = 0; j < hashes.size(); j++) {
+      const string& hash128 = Global::trim(Global::stripComments(hashes[j]));
+      if(hash128.length() <= 0)
+        continue;
+      if(hash128.length() != 32)
+        throw IOError("Could not parse hashpair in exclude hashes file: " + hash128);
+
+      uint64_t hash0 = parseHex64(hash128.substr(0,16));
+      uint64_t hash1 = parseHex64(hash128.substr(16,16));
+      excludeHashes.insert(Hash128(hash0,hash1));
+    }
+  }
+  return excludeHashes;
+}
+
+string Sgf::PositionSample::toJsonLine(const Sgf::PositionSample& sample) {
+  json data;
+  data["xSize"] = sample.board.x_size;
+  data["ySize"] = sample.board.y_size;
+  data["board"] = Board::toStringSimple(sample.board,'/');
+  data["nextPla"] = PlayerIO::playerToStringShort(sample.nextPla);
+  vector<string> moveLocs;
+  vector<string> movePlas;
+  for(size_t i = 0; i<sample.moves.size(); i++)
+    moveLocs.push_back(Location::toString(sample.moves[i].loc,sample.board));
+  for(size_t i = 0; i<sample.moves.size(); i++)
+    movePlas.push_back(PlayerIO::playerToStringShort(sample.moves[i].pla));
+
+  data["moveLocs"] = moveLocs;
+  data["movePlas"] = movePlas;
+  data["initialTurnNumber"] = sample.initialTurnNumber;
+  data["hintLoc"] = Location::toString(sample.hintLoc,sample.board);
+  return data.dump();
+}
+
+Sgf::PositionSample Sgf::PositionSample::ofJsonLine(const string& s) {
+  json data = json::parse(s);
+  PositionSample sample;
+  try {
+    int xSize = data["xSize"].get<int>();
+    int ySize = data["ySize"].get<int>();
+    sample.board = Board::parseBoard(xSize,ySize,data["board"].get<string>(),'/');
+    sample.nextPla = PlayerIO::parsePlayer(data["nextPla"].get<string>());
+    vector<string> moveLocs = data["moveLocs"].get<vector<string>>();
+    vector<string> movePlas = data["movePlas"].get<vector<string>>();
+    if(moveLocs.size() != movePlas.size())
+      throw StringError("moveLocs.size() != movePlas.size()");
+    for(size_t i = 0; i<moveLocs.size(); i++) {
+      Loc moveLoc = Location::ofString(moveLocs[i],sample.board);
+      Player movePla = PlayerIO::parsePlayer(movePlas[i]);
+      sample.moves.push_back(Move(moveLoc,movePla));
+    }
+    sample.initialTurnNumber = data["initialTurnNumber"].get<int>();
+    sample.hintLoc = Location::ofString(data["hintLoc"].get<string>(),sample.board);
+  }
+  catch(nlohmann::detail::exception& e) {
+    throw StringError("Error parsing position sample json\n" + s + "\n" + e.what());
+  }
+  return sample;
+}
 
 //PARSING---------------------------------------------------------------------
 
@@ -376,9 +676,18 @@ static char peekSgfChar(const string& str, int& pos, int& newPos) {
   newPos = pos;
   while(true) {
     if(newPos >= str.length()) sgfFail("Unexpected end of str", str,newPos);
+    //Skip any BOM at the start of the file
+    if(newPos == 0 && (str.length() >= 3 && str[0] == (char)0xEF && str[1] == (char)0xBB && str[2] == (char)0xBF)) {
+      newPos += 3;
+      continue;
+    }
+
     char c = str[newPos++];
-    if(!Global::isWhitespace(c))
-      return c;
+
+    //Skip whitespace
+    if(Global::isWhitespace(c))
+      continue;
+    return c;
   }
 }
 
@@ -638,6 +947,8 @@ CompactSgf::CompactSgf(const Sgf* sgf)
 
   checkNonEmpty(sgf->nodes);
   rootNode = *(sgf->nodes[0]);
+
+  sgfWinner = rootNode.getSgfWinner();
 }
 
 CompactSgf::CompactSgf(Sgf&& sgf)
@@ -670,6 +981,8 @@ CompactSgf::CompactSgf(Sgf&& sgf)
     delete sgf.children[i];
     sgf.children[i] = NULL;
   }
+
+  sgfWinner = rootNode.getSgfWinner();
 }
 
 CompactSgf::~CompactSgf() {
@@ -781,9 +1094,7 @@ void CompactSgf::setupInitialBoardAndHist(const Rules& initialRules, Board& boar
   hist = BoardHistory(board,nextPla,initialRules,0);
 }
 
-void CompactSgf::setupBoardAndHist(const Rules& initialRules, Board& board, Player& nextPla, BoardHistory& hist, int turnNumber) const {
-  setupInitialBoardAndHist(initialRules, board, nextPla, hist);
-
+void CompactSgf::playMovesAssumeLegal(Board& board, Player& nextPla, BoardHistory& hist, int turnNumber) const {
   if(turnNumber < 0 || turnNumber > moves.size())
     throw StringError(
       Global::strprintf(
@@ -796,6 +1107,33 @@ void CompactSgf::setupBoardAndHist(const Rules& initialRules, Board& board, Play
     hist.makeBoardMoveAssumeLegal(board,moves[i].loc,moves[i].pla,NULL);
     nextPla = getOpp(moves[i].pla);
   }
+}
+
+void CompactSgf::playMovesTolerant(Board& board, Player& nextPla, BoardHistory& hist, int turnNumber, bool preventEncore) const {
+  if(turnNumber < 0 || turnNumber > moves.size())
+    throw StringError(
+      Global::strprintf(
+        "Attempting to set up position from SGF for invalid turn number %d, valid values are %d to %d",
+        (int)turnNumber, 0, (int)moves.size()
+      )
+    );
+
+  for(size_t i = 0; i<turnNumber; i++) {
+    bool suc = hist.makeBoardMoveTolerant(board,moves[i].loc,moves[i].pla,preventEncore);
+    if(!suc)
+      throw StringError("Illegal move in " + fileName + " turn " + Global::int64ToString(i) + " move " + Location::toString(moves[i].loc, board.x_size, board.y_size));
+    nextPla = getOpp(moves[i].pla);
+  }
+}
+
+void CompactSgf::setupBoardAndHistAssumeLegal(const Rules& initialRules, Board& board, Player& nextPla, BoardHistory& hist, int turnNumber) const {
+  setupInitialBoardAndHist(initialRules, board, nextPla, hist);
+  playMovesAssumeLegal(board, nextPla, hist, turnNumber);
+}
+
+void CompactSgf::setupBoardAndHistTolerant(const Rules& initialRules, Board& board, Player& nextPla, BoardHistory& hist, int turnNumber, bool preventEncore) const {
+  setupInitialBoardAndHist(initialRules, board, nextPla, hist);
+  playMovesTolerant(board, nextPla, hist, turnNumber, preventEncore);
 }
 
 void WriteSgf::printGameResult(ostream& out, const BoardHistory& hist) {
@@ -820,11 +1158,14 @@ void WriteSgf::printGameResult(ostream& out, const BoardHistory& hist) {
 }
 
 void WriteSgf::writeSgf(
-  ostream& out, const string& bName, const string& wName, const Rules& rules,
-  const BoardHistory& hist,
-  const FinishedGameData* gameData
+  ostream& out, const string& bName, const string& wName,
+  const BoardHistory& endHist,
+  const FinishedGameData* gameData,
+  bool tryNicerRulesString
 ) {
-  const Board& initialBoard = hist.initialBoard;
+  const Board& initialBoard = endHist.initialBoard;
+  const Rules& rules = endHist.rules;
+
   int xSize = initialBoard.x_size;
   int ySize = initialBoard.y_size;
   out << "(;FF[4]GM[1]";
@@ -851,10 +1192,8 @@ void WriteSgf::writeSgf(
 
   out << "HA[" << handicap << "]";
   out << "KM[" << rules.komi << "]";
-  out << "RU[ko" << Rules::writeKoRule(rules.koRule)
-      << "score" << Rules::writeScoringRule(rules.scoringRule)
-      << "sui" << rules.multiStoneSuicideLegal << "]";
-  printGameResult(out,hist);
+  out << "RU[" << (tryNicerRulesString ? rules.toStringNoKomiMaybeNice() : rules.toStringNoKomi()) << "]";
+  printGameResult(out,endHist);
 
   bool hasAB = false;
   for(int y = 0; y<ySize; y++) {
@@ -888,32 +1227,73 @@ void WriteSgf::writeSgf(
     }
   }
 
-  int startTurnIdx = 0;
-  if(gameData != NULL) {
+  size_t startTurnIdx = 0;
+  if(gameData != NULL && gameData->hasFullData) {
     startTurnIdx = gameData->startHist.moveHistory.size();
-    out << "C[startTurnIdx=" << startTurnIdx
-        << "," << "mode=" << gameData->mode
-        << "," << "modeM1=" << gameData->modeMeta1
-        << "," << "modeM2=" << gameData->modeMeta2;
+    out << "C[startTurnIdx=" << startTurnIdx;
+
+    if(gameData->mode == FinishedGameData::MODE_NORMAL)
+      out << "," << "mode=normal";
+    else if(gameData->mode == FinishedGameData::MODE_CLEANUP_TRAINING)
+      out << "," << "mode=cleanuptraining";
+    else if(gameData->mode == FinishedGameData::MODE_FORK)
+      out << "," << "mode=fork";
+    else if(gameData->mode == FinishedGameData::MODE_HANDICAP)
+      out << "," << "mode=handicap";
+    else if(gameData->mode == FinishedGameData::MODE_SGFPOS)
+      out << "," << "mode=sgfpos";
+    else if(gameData->mode == FinishedGameData::MODE_HINTPOS)
+      out << "," << "mode=hintpos";
+    else
+      out << "," << "mode=other";
+
+    if(gameData->beganInEncorePhase != 0)
+      out << "," << "beganInEncorePhase=" << gameData->beganInEncorePhase;
+    if(gameData->usedInitialPosition != 0)
+      out << "," << "usedInitialPosition=" << gameData->usedInitialPosition;
+
     for(int j = 0; j<gameData->changedNeuralNets.size(); j++) {
       out << ",newNeuralNetTurn" << gameData->changedNeuralNets[j]->turnNumber
           << "=" << gameData->changedNeuralNets[j]->name;
     }
     out << "]";
-    assert(hist.moveHistory.size() - startTurnIdx <= gameData->whiteValueTargetsByTurn.size());
+    assert(endHist.moveHistory.size() <= startTurnIdx + gameData->whiteValueTargetsByTurn.size());
   }
 
-  for(size_t i = 0; i<hist.moveHistory.size(); i++) {
-    if(hist.moveHistory[i].pla == P_BLACK)
-      out << ";B[";
+  string comment;
+  Board board(initialBoard);
+  BoardHistory hist(board,endHist.initialPla,endHist.rules,endHist.initialEncorePhase);
+  for(size_t i = 0; i<endHist.moveHistory.size(); i++) {
+    comment.clear();
+    out << ";";
+
+    Loc loc = endHist.moveHistory[i].loc;
+    Player pla = endHist.moveHistory[i].pla;
+
+    if(pla == P_BLACK)
+      out << "B[";
     else
-      out << ";W[";
-    writeSgfLoc(out,hist.moveHistory[i].loc,xSize,ySize);
+      out << "W[";
+
+    bool isPassForKo = hist.isPassForKo(board,loc,pla);
+    if(isPassForKo)
+      writeSgfLoc(out,Board::PASS_LOC,xSize,ySize);
+    else
+      writeSgfLoc(out,loc,xSize,ySize);
     out << "]";
 
-    if(gameData != NULL) {
-      if(i >= startTurnIdx) {
-        const ValueTargets& targets = gameData->whiteValueTargetsByTurn[i-startTurnIdx];
+    if(isPassForKo) {
+      out << "TR[";
+      writeSgfLoc(out,loc,xSize,ySize);
+      out << "]";
+      comment += "Pass for ko";
+    }
+
+    if(gameData != NULL && i >= startTurnIdx) {
+      if(gameData->hasFullData) {
+        size_t turnAfterStart = i-startTurnIdx;
+        assert(turnAfterStart < gameData->whiteValueTargetsByTurn.size());
+        const ValueTargets& targets = gameData->whiteValueTargetsByTurn[turnAfterStart];
         char winBuf[32];
         char lossBuf[32];
         char noResultBuf[32];
@@ -922,13 +1302,23 @@ void WriteSgf::writeSgf(
         sprintf(lossBuf,"%.2f",targets.loss);
         sprintf(noResultBuf,"%.2f",targets.noResult);
         sprintf(scoreBuf,"%.1f",targets.score);
-        out << "C["
-            << winBuf << " "
-            << lossBuf << " "
-            << noResultBuf << " "
-            << scoreBuf << "]";
+        if(comment.length() > 0)
+          comment += " ";
+        comment += winBuf;
+        comment += " ";
+        comment += lossBuf;
+        comment += " ";
+        comment += noResultBuf;
+        comment += " ";
+        comment += scoreBuf;
       }
     }
+
+    if(comment.length() > 0)
+      out << "C[" << comment << "]";
+
+    hist.makeBoardMoveAssumeLegal(board,loc,pla,NULL);
+
   }
   out << ")";
 }
