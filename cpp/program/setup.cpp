@@ -44,6 +44,8 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
   string backendPrefix = "cuda";
   #elif defined(USE_OPENCL_BACKEND)
   string backendPrefix = "opencl";
+  #elif defined(USE_TFJS_BACKEND)
+  string backendPrefix = "tfjs";
   #else
   string backendPrefix = "dummybackend";
   #endif
@@ -54,6 +56,8 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
     cfg.markAllKeysUsedWithPrefix("cuda");
   if(backendPrefix != "opencl")
     cfg.markAllKeysUsedWithPrefix("opencl");
+  if(backendPrefix != "tfjs")
+    cfg.markAllKeysUsedWithPrefix("tfjs");
   if(backendPrefix != "dummybackend")
     cfg.markAllKeysUsedWithPrefix("dummybackend");
 
