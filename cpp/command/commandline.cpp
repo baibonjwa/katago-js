@@ -5,14 +5,19 @@
 #include "../program/setup.h"
 #include "../main.h"
 
+#if !defined(__EMSCRIPTEN__)
 #include <boost/filesystem.hpp>
 namespace bfs = boost::filesystem;
+#endif
 
 using namespace std;
 
 //--------------------------------------------------------------------------------------
 
 static bool doesPathExist(const string& path) {
+#if defined(__EMSCRIPTEN__)
+  return false;
+#else
   try {
     bfs::path bfsPath(path);
     return bfs::exists(bfsPath);
@@ -20,6 +25,7 @@ static bool doesPathExist(const string& path) {
   catch(const bfs::filesystem_error&) {
     return false;
   }
+#endif
 }
 
 static string getDefaultConfigPathForHelp(const string& defaultConfigFileName) {

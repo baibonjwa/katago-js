@@ -64,16 +64,18 @@ sandbox
 }
 
 static int handleSubcommand(const string& subcommand, int argc, const char* argv[]) {
+#if defined(__EMSCRIPTEN__)
+  if(subcommand == "gtp")
+    return MainCmds::gtp(argc-1,&argv[1]);
+#else
   if(subcommand == "analysis")
     return MainCmds::analysis(argc-1,&argv[1]);
   if(subcommand == "benchmark")
     return MainCmds::benchmark(argc-1,&argv[1]);
   if(subcommand == "evalsgf")
     return MainCmds::evalsgf(argc-1,&argv[1]);
-  #if !defined(__EMSCRIPTEN__)
   else if(subcommand == "gatekeeper")
     return MainCmds::gatekeeper(argc-1,&argv[1]);
-  #endif
   else if(subcommand == "genconfig")
     return MainCmds::genconfig(argc-1,&argv[1],argv[0]);
   else if(subcommand == "gtp")
@@ -82,7 +84,6 @@ static int handleSubcommand(const string& subcommand, int argc, const char* argv
     return MainCmds::tuner(argc-1,&argv[1]);
   else if(subcommand == "match")
     return MainCmds::match(argc-1,&argv[1]);
-  #if !defined(__EMSCRIPTEN__)
   else if(subcommand == "matchauto")
     return MainCmds::matchauto(argc-1,&argv[1]);
   else if(subcommand == "selfplay")
@@ -111,7 +112,6 @@ static int handleSubcommand(const string& subcommand, int argc, const char* argv
     return MainCmds::runsekitrainwritetests(argc-1,&argv[1]);
   else if(subcommand == "runnnonmanyposestest")
     return MainCmds::runnnonmanyposestest(argc-1,&argv[1]);
-  #endif
   else if(subcommand == "dataminesgfs")
     return MainCmds::dataminesgfs(argc-1,&argv[1]);
   else if(subcommand == "lzcost")
@@ -126,6 +126,7 @@ static int handleSubcommand(const string& subcommand, int argc, const char* argv
     cout << Version::getKataGoVersionFullInfo() << std::flush;
     return 0;
   }
+#endif
   else {
     cout << "Unknown subcommand: " << subcommand << endl;
     printHelp(argc,argv);

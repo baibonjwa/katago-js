@@ -149,7 +149,7 @@ add_executable(katago
   dataio/sgf.cpp
   dataio/numpywrite.cpp
   dataio/trainingwrite.cpp
-  dataio/loadmodel.cpp
+  #dataio/loadmodel.cpp
   #dataio/lzparse.cpp
   dataio/homedata.cpp
   neuralnet/nninputs.cpp
@@ -172,32 +172,32 @@ add_executable(katago
   program/play.cpp
   program/selfplaymanager.cpp
   ${GIT_HEADER_FILE_ALWAYS_UPDATED}
-  tests/testboardarea.cpp
-  tests/testboardbasic.cpp
-  tests/testcommon.cpp
-  tests/testrules.cpp
-  tests/testscore.cpp
-  tests/testsgf.cpp
-  tests/testnninputs.cpp
-  tests/testownership.cpp
+  #tests/testboardarea.cpp
+  #tests/testboardbasic.cpp
+  #tests/testcommon.cpp
+  #tests/testrules.cpp
+  #tests/testscore.cpp
+  #tests/testsgf.cpp
+  #tests/testnninputs.cpp
+  #tests/testownership.cpp
   #tests/testsearch.cpp
-  tests/testtime.cpp
+  #tests/testtime.cpp
   #tests/testtrainingwrite.cpp
-  tests/testnn.cpp
+  #tests/testnn.cpp
   command/commandline.cpp
-  command/analysis.cpp
-  command/benchmark.cpp
-  command/evalsgf.cpp
-  command/gatekeeper.cpp
+  #command/analysis.cpp
+  #command/benchmark.cpp
+  #command/evalsgf.cpp
+  #command/gatekeeper.cpp
   command/gtp.cpp
-  command/lzcost.cpp
-  command/match.cpp
-  command/matchauto.cpp
+  #command/lzcost.cpp
+  #command/match.cpp
+  #command/matchauto.cpp
   command/misc.cpp
-  command/runtests.cpp
-  command/sandbox.cpp
-  command/selfplay.cpp
-  command/tune.cpp
+  #command/runtests.cpp
+  #command/sandbox.cpp
+  #command/selfplay.cpp
+  #command/tune.cpp
   main.cpp
   )
 

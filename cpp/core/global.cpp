@@ -17,7 +17,9 @@
 #include <iomanip>
 #include <sstream>
 #include <sys/types.h>
+#if !defined(__EMSCRIPTEN__)
 #include <boost/filesystem.hpp>
+#endif
 
 using namespace std;
 
@@ -679,6 +681,7 @@ vector<string> Global::readFileLines(const string& filename, char delimiter)
 
 void Global::collectFiles(const string& dirname, std::function<bool(const string&)> fileFilter, vector<string>& collected)
 {
+#if !defined(__EMSCRIPTEN__)
   namespace bfs = boost::filesystem;
   try {
     for(const bfs::directory_entry& entry: bfs::recursive_directory_iterator(dirname)) {
@@ -695,6 +698,7 @@ void Global::collectFiles(const string& dirname, std::function<bool(const string
     cerr << "Error recursively collectng files: " << e.what() << endl;
     return;
   }
+#endif
 }
 
 //USER IO----------------------------
