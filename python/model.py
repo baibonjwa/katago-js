@@ -417,10 +417,10 @@ class Model:
 
     #This is the mean, computed only over exactly the areas of the mask, weighting each spot equally,
     #even across different elements in the batch that might have different board sizes.
-    mean = tf.reduce_sum(tensor * mask,axis=[0,1,2]) / mask_sum
+    mean = tf.reduce_mean(tensor,axis=[0,1,2])
     zmtensor = tensor-mean
     #Similarly, the variance computed exactly only over those spots
-    var = tf.reduce_sum(tf.square(zmtensor * mask),axis=[0,1,2]) / mask_sum
+    var = tf.reduce_mean(tf.square(zmtensor),axis=[0,1,2])
     mean_op = tf.keras.backend.moving_average_update(moving_mean,mean,0.998)
     var_op = tf.keras.backend.moving_average_update(moving_var,var,0.998)
     tf.add_to_collection(tf.GraphKeys.UPDATE_OPS, mean_op)
@@ -432,7 +432,7 @@ class Model:
       return (moving_mean,moving_var)
 
     use_mean,use_var = tf.cond(self.is_training,training_f,inference_f)
-    return tf.nn.batch_normalization(tensor,use_mean,use_var,beta,None,epsilon) * mask
+    return tf.nn.batch_normalization(tensor,use_mean,use_var,beta,None,epsilon)
 
   # def batchnorm(self,name,tensor):
   #   epsilon = 0.001
@@ -667,7 +667,7 @@ class Model:
     div = tf.reshape(mask_sum_hw,[-1,1,1,1])
     div_sqrt = tf.reshape(mask_sum_hw_sqrt,[-1,1,1,1])
 
-    layer_raw_mean = tf.reduce_sum(in_layer,axis=[1,2],keepdims=True) / div
+    layer_raw_mean = tf.reduce_mean(in_layer,axis=[1,2],keepdims=True)
     layer_raw_max = tf.reduce_max(in_layer,axis=[1,2],keepdims=True)
 
     # 1, (x-14)/10, and (x-14)^2/100 - 0.1 are three orthogonal functions over [9,19], the range of reasonable board sizes.
@@ -684,7 +684,7 @@ class Model:
     div = tf.reshape(mask_sum_hw,[-1,1])
     div_sqrt = tf.reshape(mask_sum_hw_sqrt,[-1,1])
 
-    layer_raw_mean = tf.reduce_sum(in_layer,axis=[1,2],keepdims=False) / div
+    layer_raw_mean = tf.reduce_mean(in_layer,axis=[1,2],keepdims=False)
 
     # 1, (x-14)/10, and (x-14)^2/100 - 0.1 are three orthogonal functions over [9,19], the range of reasonable board sizes.
     # We have the 14 in there since it's the midpoint of that range. The /10 and /100 are just sort of arbitrary normalization to keep things on the same scale
@@ -1137,7 +1137,7 @@ class Model:
     bonusbelief_output = tf.reshape(bb3_layer,[-1] + self.bonusbelief_target_shape, name = "bonusbelief_output")
 
     #No need for separate mask since v1_layer is already zero outside of mask bounds.
-    ownership_output = self.conv_only_block("vownership",v1_layer,diam=1,in_channels=v1_num_channels,out_channels=1, scale_initial_weights=0.2, reg=False) * mask
+    ownership_output = self.conv_only_block("vownership",v1_layer,diam=1,in_channels=v1_num_channels,out_channels=1, scale_initial_weights=0.2, reg=False)
     self.vownership_conv = ("vownership",1,v1_num_channels,1)
     ownership_output = self.apply_symmetry(ownership_output,symmetries,inverse=True)
     ownership_output = tf.reshape(ownership_output, [-1] + self.ownership_target_shape, name = "ownership_output")

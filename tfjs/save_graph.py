@@ -8,7 +8,7 @@ import common
 from model import Model
 
 if __name__ == '__main__':
-    pos_len = 19
+    pos_len = 7
     description = """
     Play go with a trained neural net!
     Implements a basic GTP engine that uses the neural net directly to play moves.
