@@ -31,7 +31,7 @@ args = vars(parser.parse_args())
 name_scope = args["name_scope"]
 
 #Hardcoded max board size
-pos_len = 19
+pos_len = 7
 
 # Model ----------------------------------------------------------------
 
@@ -57,6 +57,14 @@ sbscale = model.sbscale3_layer
 # bbscale = model.bbscale3_layer
 # sbscale = tf.zeros([1],dtype=tf.float32)
 bbscale = tf.zeros([1],dtype=tf.float32)
+
+def print_policy(arr):
+  for y in range(pos_len):
+    print("{} ".format(y), end="")
+    for x in range(pos_len):
+      print("{:.1f} ".format(arr[y * pos_len + x]), end="")
+    print()
+  #print("pass={:.1f}".format(arr[-1]))
 
 # Moves ----------------------------------------------------------------
 
@@ -115,6 +123,7 @@ def get_ownership_values(session, board, boards, moves, use_history_prop, rules)
 def get_moves_and_probs_and_value(session, board, boards, moves, use_history_prop, rules):
   pla = board.pla
   [policy,value] = get_policy_and_value_output(session, board, boards, moves, use_history_prop, rules)
+  print_policy(policy)
   moves_and_probs = []
   for i in range(len(policy)):
     move = model.tensor_pos_to_loc(i,board)
@@ -446,7 +455,7 @@ def run_gtp(session):
     'gfx/PassAlive/passalive',
   ]
 
-  board_size = 19
+  board_size = pos_len
   board = Board(size=board_size)
   moves = []
   boards = [board.copy()]
@@ -460,6 +469,9 @@ def run_gtp(session):
 
 
   def add_extra_board_size_visualizations(layer_name, layer, normalization_div):
+    if layer.shape[1].value != board_size:
+      print("add_extra_board_size_visualizations", layer_name, layer.name)
+      return
     assert(layer.shape[1].value == board_size)
     assert(layer.shape[2].value == board_size)
     num_channels = layer.shape[3].value

@@ -36,9 +36,9 @@ struct ComputeContext {
 };
 
 struct TFJSOutput {
-  float policyProbs[19*19+1];
+  float policyProbs[7*7+1];
   float valueResults[3];
-  float ownershipResults[19*19];
+  float ownershipResults[7*7];
   float scoreValueResults[2];
 };
 
