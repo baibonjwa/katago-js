@@ -28,7 +28,6 @@ if __name__ == '__main__':
         with tf.name_scope(name_scope):
             model = Model(model_config,pos_len,{
                   "is_training": tf.constant(False,dtype=tf.bool),
-                  "symmetries": tf.constant(False, shape=[3], dtype=tf.bool),
                   "include_history": tf.constant(1.0, shape=[1,5], dtype=tf.float32)
             })
     else:
@@ -51,6 +50,7 @@ if __name__ == '__main__':
             inputs={
                 "swa_model/bin_inputs": model.bin_inputs,
                 "swa_model/global_inputs": model.global_inputs,
+                "symmetries": model.symmetries,
             },
             outputs={
                 'swa_model/policy_output': model.policy_output,
