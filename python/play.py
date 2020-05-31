@@ -31,7 +31,7 @@ args = vars(parser.parse_args())
 name_scope = args["name_scope"]
 
 #Hardcoded max board size
-pos_len = 7
+pos_len = 19
 
 # Model ----------------------------------------------------------------
 
@@ -57,14 +57,6 @@ sbscale = model.sbscale3_layer
 # bbscale = model.bbscale3_layer
 # sbscale = tf.zeros([1],dtype=tf.float32)
 bbscale = tf.zeros([1],dtype=tf.float32)
-
-def print_policy(arr):
-  for y in range(pos_len):
-    print("{} ".format(y), end="")
-    for x in range(pos_len):
-      print("{:.1f} ".format(arr[y * pos_len + x]), end="")
-    print()
-  #print("pass={:.1f}".format(arr[-1]))
 
 # Moves ----------------------------------------------------------------
 
@@ -123,7 +115,6 @@ def get_ownership_values(session, board, boards, moves, use_history_prop, rules)
 def get_moves_and_probs_and_value(session, board, boards, moves, use_history_prop, rules):
   pla = board.pla
   [policy,value] = get_policy_and_value_output(session, board, boards, moves, use_history_prop, rules)
-  print_policy(policy)
   moves_and_probs = []
   for i in range(len(policy)):
     move = model.tensor_pos_to_loc(i,board)

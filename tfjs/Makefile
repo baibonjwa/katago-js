@@ -1,5 +1,6 @@
 MODEL = g104-b6c96-s97778688-d23397744
-SIZE = 7
+# Specify SIZE except for 19x19 board 
+# SIZE = 7
 
 all: web_model
 
