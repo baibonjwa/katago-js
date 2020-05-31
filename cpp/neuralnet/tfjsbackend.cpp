@@ -11,7 +11,7 @@ extern "C" {
   extern int setBackend(int);
   extern int downloadModel(int);
   extern void removeModel();
-  extern int predict(int, int, int, int, int, int, int, int, int, int, int, int, int, int);
+  extern int predict(int, int, int, int, int, int, int, int, int, int, int, int, int, int, int);
   extern int jsGetModelVersion();
 }
 
@@ -33,13 +33,6 @@ struct ComputeContext {
       logger->write("backend: auto");
     }
   }
-};
-
-struct TFJSOutput {
-  float policyProbs[7*7+1];
-  float valueResults[3];
-  float ownershipResults[7*7];
-  float scoreValueResults[2];
 };
 
 void NeuralNet::globalInitialize() {
@@ -302,6 +295,7 @@ void NeuralNet::getOutput(
 
   clock_t start = clock();
   if(predict(
+    nnXLen * nnYLen,
     batchSize,
     (int)buffers->userInputBuffer,
     nnXLen * nnYLen,

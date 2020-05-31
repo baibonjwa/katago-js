@@ -8,18 +8,18 @@ import common
 from model import Model
 
 if __name__ == '__main__':
-    pos_len = 7
     description = """
-    Play go with a trained neural net!
-    Implements a basic GTP engine that uses the neural net directly to play moves.
+    save a model in saved model format
     """
 
     parser = argparse.ArgumentParser(description=description)
     common.add_model_load_args(parser)
     parser.add_argument('-name-scope', help='Name scope for model variables', required=False)
+    parser.add_argument('-board-size', help='Board size', required=True)
     args = vars(parser.parse_args())
 
     (model_variables_prefix, model_config_json) = common.load_model_paths(args)
+    pos_len = int(args["board_size"])
     name_scope = args["name_scope"]
     with open(model_config_json) as f:
         model_config = json.load(f)

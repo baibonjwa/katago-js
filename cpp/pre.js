@@ -57,6 +57,7 @@ GraphModelWrapper.prototype.removeModel = function() {
 };
 
 GraphModelWrapper.prototype.predict = function(
+    boardWxH,
     batches,
     inputBuffer, inputBufferLength, inputBufferChannels,
     inputGlobalBuffer, inputGlobalBufferChannels,
@@ -77,7 +78,6 @@ GraphModelWrapper.prototype.predict = function(
                 "swa_model/symmetries": tf.tensor(symmetries, [symmetriesBufferLength], 'bool'),
             }).then(function(results) {
                 var i;
-                const pos_len = 7;
                 for (i = 0; i < results.length; i++) {
                     const result = results[i];
                     const data = result.dataSync();
@@ -88,16 +88,16 @@ GraphModelWrapper.prototype.predict = function(
                         case 6: // miscvalues
                         Module.HEAPF32.set(data, miscvalues / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
-                        case pos_len * pos_len: // ownership
+                        case boardWxH: // ownership
                         Module.HEAPF32.set(data, ownerships / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
                         case 61:  // bonusbelief
                         Module.HEAPF32.set(data, bonusbelieves / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
-                        case (pos_len * pos_len) * 2 + 120: // scorebelief
+                        case boardWxH * 2 + 120: // scorebelief
                         Module.HEAPF32.set(data, scorebelieves / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
-                        case (pos_len * pos_len + 1) * 2: // policy
+                        case (boardWxH + 1) * 2: // policy
                         Module.HEAPF32.set(data, policies / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
                     }

@@ -1,9 +1,10 @@
 MODEL = g104-b6c96-s97778688-d23397744
+SIZE = 7
 
 all: web_model
 
 saved_model/saved_model.pb:
-	python save_graph.py -name-scope swa_model -model-variables-prefix ../models/$(MODEL)/saved_model/variables/variables -model-config-json ../models/$(MODEL)/model.config.json
+	python save_graph.py -name-scope swa_model -model-variables-prefix ../models/$(MODEL)/saved_model/variables/variables -model-config-json ../models/$(MODEL)/model.config.json -board-size $(SIZE)
 
 web_model: saved_model/saved_model.pb
 	tensorflowjs_converter \
