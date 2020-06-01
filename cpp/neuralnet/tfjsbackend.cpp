@@ -11,7 +11,7 @@ extern "C" {
   extern int setBackend(int);
   extern int downloadModel(int);
   extern void removeModel();
-  extern int predict(int, int, int, int, int, int, int, int, int, int, int, int, int, int, int);
+  extern int predict(int, int, int, int, int, int, int, int, int, int, int, int, int, int);
   extern int jsGetModelVersion();
 }
 
@@ -295,7 +295,6 @@ void NeuralNet::getOutput(
 
   clock_t start = clock();
   if(predict(
-    nnXLen * nnYLen,
     batchSize,
     (int)buffers->userInputBuffer,
     nnXLen * nnYLen,
