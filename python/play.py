@@ -578,6 +578,10 @@ def run_gtp(session):
     "passWouldEndPhase": False,
     "whiteKomi": 7.5
   }
+  board_size = pos_len
+  board = Board(size=board_size)
+  moves = []
+  boards = [board.copy()]
 
   layerdict = dict(model.outputs_by_layer)
   weightdict = dict()
@@ -588,6 +592,9 @@ def run_gtp(session):
 
 
   def add_extra_board_size_visualizations(layer_name, layer, normalization_div):
+    if layer.shape[1].value != board_size:
+      print("add_extra_board_size_visualizations", layer_name, layer.name)
+      return
     assert(layer.shape[1].value == board_size)
     assert(layer.shape[2].value == board_size)
     num_channels = layer.shape[3].value

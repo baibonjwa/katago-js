@@ -58,16 +58,23 @@ GraphModelWrapper.prototype.removeModel = function() {
 
 GraphModelWrapper.prototype.predict = function(
     batches,
-    inputBuffer, inputBufferLength, inputBufferChannels,
+    inputBuffer, boardWxH, inputBufferChannels,
     inputGlobalBuffer, inputGlobalBufferChannels,
+    symmetriesBuffer, symmetriesBufferLength,
     values, miscvalues, ownerships, bonusbelieves, scorebelieves, policies) {
     return Asyncify.handleSleep(function(wakeUp) {
         try {
-            const bin_inputs = new Float32Array(Module.HEAPF32.buffer, inputBuffer, batches * inputBufferLength * inputBufferChannels);
+            const bin_inputs = new Float32Array(Module.HEAPF32.buffer, inputBuffer, batches * boardWxH * inputBufferChannels);
             const global_inputs = new Float32Array(Module.HEAPF32.buffer, inputGlobalBuffer, batches * inputGlobalBufferChannels);
+            const _symmetries = new Int8Array(Module.HEAP8.buffer, symmetriesBuffer, symmetriesBufferLength);
+            const symmetries = new Array(symmetriesBufferLength);
+            for (let i = 0; i < symmetriesBufferLength; i++) {
+                symmetries[i] = _symmetries[i] != 0
+            }
             this.model.executeAsync({
-                "swa_model/bin_inputs": tf.tensor(bin_inputs, [batches, inputBufferLength, inputBufferChannels], 'float32'),
-                "swa_model/global_inputs": tf.tensor(global_inputs, [batches, inputGlobalBufferChannels], 'float32')
+                "swa_model/bin_inputs": tf.tensor(bin_inputs, [batches, boardWxH, inputBufferChannels], 'float32'),
+                "swa_model/global_inputs": tf.tensor(global_inputs, [batches, inputGlobalBufferChannels], 'float32'),
+                "swa_model/symmetries": tf.tensor(symmetries, [symmetriesBufferLength], 'bool'),
             }).then(function(results) {
                 var i;
                 for (i = 0; i < results.length; i++) {
@@ -80,16 +87,16 @@ GraphModelWrapper.prototype.predict = function(
                         case 6: // miscvalues
                         Module.HEAPF32.set(data, miscvalues / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
-                        case 361: // ownership
+                        case boardWxH: // ownership
                         Module.HEAPF32.set(data, ownerships / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
                         case 61:  // bonusbelief
                         Module.HEAPF32.set(data, bonusbelieves / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
-                        case 842: // scorebelief
+                        case boardWxH * 2 + 120: // scorebelief
                         Module.HEAPF32.set(data, scorebelieves / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
-                        case 724: // policy
+                        case (boardWxH + 1) * 2: // policy
                         Module.HEAPF32.set(data, policies / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
                     }

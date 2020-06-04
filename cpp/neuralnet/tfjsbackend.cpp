@@ -11,7 +11,7 @@ extern "C" {
   extern int setBackend(int);
   extern int downloadModel(int);
   extern void removeModel();
-  extern int predict(int, int, int, int, int, int, int, int, int, int, int, int);
+  extern int predict(int, int, int, int, int, int, int, int, int, int, int, int, int, int);
   extern int jsGetModelVersion();
 }
 
@@ -35,13 +35,6 @@ struct ComputeContext {
       logger->write("backend: auto");
     }
   }
-};
-
-struct TFJSOutput {
-  float policyProbs[19*19+1];
-  float valueResults[3];
-  float ownershipResults[19*19];
-  float scoreValueResults[2];
 };
 
 void NeuralNet::globalInitialize() {
@@ -308,6 +301,8 @@ void NeuralNet::getOutput(
     gpuHandle->model->modelDesc.numInputChannels,
     (int)buffers->userInputGlobalBuffer,
     gpuHandle->model->modelDesc.numInputGlobalChannels,
+    (int)buffers->symmetriesBuffer,
+    NNInputs::NUM_SYMMETRY_BOOLS,
     (int)values,
     (int)miscvalues,
     (int)ownerships,

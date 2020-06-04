@@ -8,18 +8,18 @@ import common
 from model import Model
 
 if __name__ == "__main__":
-    pos_len = 19
     description = """
-    Play go with a trained neural net!
-    Implements a basic GTP engine that uses the neural net directly to play moves.
+    save a model in saved model format
     """
 
     parser = argparse.ArgumentParser(description=description)
     common.add_model_load_args(parser)
-    parser.add_argument("-name-scope", help="Name scope for model variables", required=False)
+    parser.add_argument('-name-scope', help='Name scope for model variables', required=False)
+    parser.add_argument('-board-size', help='Board size', required=True)
     args = vars(parser.parse_args())
 
     (model_variables_prefix, model_config_json) = common.load_model_paths(args)
+    pos_len = int(args["board_size"])
     name_scope = args["name_scope"]
     with open(model_config_json) as f:
         model_config = json.load(f)
@@ -28,13 +28,11 @@ if __name__ == "__main__":
         with tf.name_scope(name_scope):
             model = Model(model_config,pos_len,{
                   "is_training": tf.constant(False,dtype=tf.bool),
-                  #"symmetries": tf.constant(False, shape=[3], dtype=tf.bool),
                   "include_history": tf.constant(1.0, shape=[1,5], dtype=tf.float32)
             })
     else:
         model = Model(model_config,pos_len,{
                   "is_training": tf.constant(False,dtype=tf.bool),
-                  #"symmetries": tf.constant(False, shape=[3], dtype=tf.bool),
                   "include_history": tf.constant(1.0, shape=[1,5], dtype=tf.float32)
         })
 
@@ -45,4 +43,20 @@ if __name__ == "__main__":
 
     with tf.Session() as session:
         saver.restore(session, model_variables_prefix)
-        tf.train.write_graph(session.graph,"./tmp","graph.pbtxt", as_text=True)
+        tf.compat.v1.saved_model.simple_save(
+            session,
+            './saved_model',
+            inputs={
+                "swa_model/bin_inputs": model.bin_inputs,
+                "swa_model/global_inputs": model.global_inputs,
+                "symmetries": model.symmetries,
+            },
+            outputs={
+                'swa_model/policy_output': model.policy_output,
+                'swa_model/value_output': model.value_output,
+                'swa_model/miscvalues_output': model.miscvalues_output,
+                'swa_model/scorebelief_output': model.scorebelief_output,
+                'swa_model/bonusbelief_output': model.bonusbelief_output,
+                'swa_model/ownership_output': model.ownership_output,
+            }
+        )

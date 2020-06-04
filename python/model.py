@@ -531,10 +531,10 @@ class Model:
 
     #This is the mean, computed only over exactly the areas of the mask, weighting each spot equally,
     #even across different elements in the batch that might have different board sizes.
-    mean = tf.reduce_sum(tensor * mask,axis=[0,1,2]) / mask_sum
+    mean = tf.reduce_mean(tensor,axis=[0,1,2])
     zmtensor = tensor-mean
     #Similarly, the variance computed exactly only over those spots
-    var = tf.reduce_sum(tf.square(zmtensor * mask),axis=[0,1,2]) / mask_sum
+    var = tf.reduce_mean(tf.square(zmtensor * mask),axis=[0,1,2])
 
     with tf.compat.v1.variable_scope(name):
       mean_op = tf.keras.backend.moving_average_update(moving_mean,mean,0.998)
@@ -549,7 +549,7 @@ class Model:
       return (moving_mean,moving_var)
 
     use_mean,use_var = tf.cond(self.is_training_tensor,training_f,inference_f)
-    return tf.nn.batch_normalization(tensor,use_mean,use_var,beta,None,epsilon) * mask
+    return tf.nn.batch_normalization(tensor,use_mean,use_var,beta,None,epsilon)
 
   # def batchnorm(self,name,tensor):
   #   epsilon = 0.001
@@ -795,7 +795,7 @@ class Model:
     div = tf.reshape(mask_sum_hw,[-1,1,1,1])
     div_sqrt = tf.reshape(mask_sum_hw_sqrt,[-1,1,1,1])
 
-    layer_raw_mean = tf.reduce_sum(in_layer,axis=[1,2],keepdims=True) / div
+    layer_raw_mean = tf.reduce_mean(in_layer,axis=[1,2],keepdims=True)
     layer_raw_max = tf.reduce_max(in_layer,axis=[1,2],keepdims=True)
 
     # 1, (x-14)/10, and (x-14)^2/100 - 0.1 are three orthogonal functions over [9,19], the range of reasonable board sizes.
@@ -812,7 +812,7 @@ class Model:
     div = tf.reshape(mask_sum_hw,[-1,1])
     div_sqrt = tf.reshape(mask_sum_hw_sqrt,[-1,1])
 
-    layer_raw_mean = tf.reduce_sum(in_layer,axis=[1,2],keepdims=False) / div
+    layer_raw_mean = tf.reduce_mean(in_layer,axis=[1,2],keepdims=False)
 
     # 1, (x-14)/10, and (x-14)^2/100 - 0.1 are three orthogonal functions over [9,19], the range of reasonable board sizes.
     # We have the 14 in there since it's the midpoint of that range. The /10 and /100 are just sort of arbitrary normalization to keep things on the same scale
@@ -1170,22 +1170,22 @@ class Model:
     scorebelief_output = tf.reshape(sb3_layer,[-1] + self.scorebelief_target_shape, name = "scorebelief_output")
 
     #No need for separate mask since v1_layer is already zero outside of mask bounds.
-    ownership_output = self.conv_only_block("vownership",v1_layer,diam=1,in_channels=v1_num_channels,out_channels=1, scale_initial_weights=0.2) * mask
+    ownership_output = self.conv_only_block("vownership",v1_layer,diam=1,in_channels=v1_num_channels,out_channels=1, scale_initial_weights=0.2)
     self.vownership_conv = ("vownership",1,v1_num_channels,1)
     ownership_output = self.apply_symmetry(ownership_output,symmetries,inverse=True)
     ownership_output = tf.reshape(ownership_output, [-1] + self.ownership_target_shape, name = "ownership_output")
 
-    scoring_output = self.conv_only_block("vscoring",v1_layer,diam=1,in_channels=v1_num_channels,out_channels=1, scale_initial_weights=0.2) * mask
+    scoring_output = self.conv_only_block("vscoring",v1_layer,diam=1,in_channels=v1_num_channels,out_channels=1, scale_initial_weights=0.2)
     self.vscoring_conv = ("vscoring",1,v1_num_channels,1)
     scoring_output = self.apply_symmetry(scoring_output,symmetries,inverse=True)
     scoring_output = tf.reshape(scoring_output, [-1] + self.scoring_target_shape, name = "scoring_output")
 
-    futurepos_output = self.conv_only_block("futurepos",v0_layer,diam=1,in_channels=trunk_num_channels,out_channels=2, scale_initial_weights=0.2) * mask
+    futurepos_output = self.conv_only_block("futurepos",v0_layer,diam=1,in_channels=trunk_num_channels,out_channels=2, scale_initial_weights=0.2)
     self.futurepos_conv = ("futurepos",1,trunk_num_channels,2)
     futurepos_output = self.apply_symmetry(futurepos_output,symmetries,inverse=True)
     futurepos_output = tf.reshape(futurepos_output, [-1] + self.futurepos_target_shape, name = "futurepos_output")
 
-    seki_output = self.conv_only_block("seki",v0_layer,diam=1,in_channels=trunk_num_channels,out_channels=4, scale_initial_weights=0.2) * mask
+    seki_output = self.conv_only_block("seki",v0_layer,diam=1,in_channels=trunk_num_channels,out_channels=4, scale_initial_weights=0.2)
     self.seki_conv = ("seki",1,trunk_num_channels,4)
     seki_output = self.apply_symmetry(seki_output,symmetries,inverse=True)
     seki_output = tf.reshape(seki_output, [-1] + self.seki_output_shape, name = "seki_output")
