@@ -207,6 +207,10 @@ void NeuralNet::freeLoadedModel(LoadedModel* loadedModel) {
   removeModel();
 }
 
+string NeuralNet::getModelName(const LoadedModel* loadedModel) {
+  return loadedModel->modelDesc.name;
+}
+
 int NeuralNet::getModelVersion(const LoadedModel* loadedModel) {
   return jsGetModelVersion();
 }

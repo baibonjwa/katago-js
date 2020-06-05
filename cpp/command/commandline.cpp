@@ -31,6 +31,7 @@ static bool doesPathExist(const string& path) {
 static string getDefaultConfigPathForHelp(const string& defaultConfigFileName) {
   return HomeData::getDefaultFilesDirForHelpMessage() + "/" + defaultConfigFileName;
 }
+#if !defined(__EMSCRIPTEN__)
 static vector<string> getDefaultConfigPaths(const string& defaultConfigFileName) {
   vector<string> v = HomeData::getDefaultFilesDirs();
   for(int i = 0; i<v.size(); i++) {
@@ -38,11 +39,13 @@ static vector<string> getDefaultConfigPaths(const string& defaultConfigFileName)
   }
   return v;
 }
+#endif
 
 static string getDefaultModelPathForHelp() {
   return HomeData::getDefaultFilesDirForHelpMessage() + "/" + "default_model.bin.gz";
 }
 
+#if !defined(__EMSCRIPTEN__)
 static vector<string> getDefaultModelPaths() {
   vector<string> dirs = HomeData::getDefaultFilesDirs();
   vector<string> ret;
@@ -52,6 +55,7 @@ static vector<string> getDefaultModelPaths() {
   }
   return ret;
 }
+#endif
 
 //--------------------------------------------------------------------------------------
 
@@ -253,6 +257,7 @@ void KataGoCommandLine::addOverrideConfigArg() {
 string KataGoCommandLine::getModelFile() const {
   assert(modelFileArg != NULL);
   string modelFile = modelFileArg->getValue();
+  #if !defined(__EMSCRIPTEN__)
   if(modelFile.empty()) {
     string pathForErrMsg;
     try {
@@ -270,6 +275,7 @@ string KataGoCommandLine::getModelFile() const {
       pathForErrMsg = getDefaultModelPathForHelp();
     throw StringError("-model MODELFILENAME.bin.gz was not specified to tell KataGo where to find the neural net model, and default was not found at " + pathForErrMsg);
   }
+  #endif
   return modelFile;
 }
 
@@ -280,6 +286,7 @@ bool KataGoCommandLine::modelFileIsDefault() const {
 string KataGoCommandLine::getConfigFile() const {
   assert(configFileArg != NULL);
   string configFile = configFileArg->getValue();
+  #if !defined(__EMSCRIPTEN__)
   if(configFile.empty() && !defaultConfigFileName.empty()) {
     string pathForErrMsg;
     try {
@@ -297,6 +304,7 @@ string KataGoCommandLine::getConfigFile() const {
       pathForErrMsg = getDefaultConfigPathForHelp(defaultConfigFileName);
     throw StringError("-config CONFIG_FILE_NAME.cfg was not specified to tell KataGo where to find the config, and default was not found at " + pathForErrMsg);
   }
+  #endif
   return configFile;
 }
 
