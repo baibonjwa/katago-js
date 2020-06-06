@@ -1,4 +1,4 @@
-MODEL = g104-b6c96-s97778688-d23397744
+MODEL = g170-b6c96-s175395328-d26788732
 # Specify target board size below.
 SIZE = 19
 #SIZE = 7

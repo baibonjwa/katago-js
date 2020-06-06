@@ -25,7 +25,7 @@ if __name__ == "__main__":
         model_config = json.load(f)
 
     if name_scope is not None:
-        with tf.name_scope(name_scope):
+        with tf.compat.v1.variable_scope(name_scope):
             model = Model(model_config,pos_len,{
                   "is_training": tf.constant(False,dtype=tf.bool),
                   "include_history": tf.constant(1.0, shape=[1,5], dtype=tf.float32)
@@ -36,12 +36,12 @@ if __name__ == "__main__":
                   "include_history": tf.constant(1.0, shape=[1,5], dtype=tf.float32)
         })
 
-    saver = tf.train.Saver(
+    saver = tf.compat.v1.train.Saver(
         max_to_keep = 10000,
         save_relative_paths = True,
     )
 
-    with tf.Session() as session:
+    with tf.compat.v1.Session() as session:
         saver.restore(session, model_variables_prefix)
         tf.compat.v1.saved_model.simple_save(
             session,
@@ -56,7 +56,6 @@ if __name__ == "__main__":
                 'swa_model/value_output': model.value_output,
                 'swa_model/miscvalues_output': model.miscvalues_output,
                 'swa_model/scorebelief_output': model.scorebelief_output,
-                'swa_model/bonusbelief_output': model.bonusbelief_output,
                 'swa_model/ownership_output': model.ownership_output,
             }
         )
