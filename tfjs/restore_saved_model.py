@@ -29,4 +29,4 @@ def convert_graph_def_to_saved_model(export_dir, graph_filepath):
     print('Optimized graph converted to SavedModel!')
 
 if __name__ == "__main__":
-    convert_graph_def_to_saved_model("saved_model", sys.argv[1])
+    convert_graph_def_to_saved_model( sys.argv[2], sys.argv[1])
