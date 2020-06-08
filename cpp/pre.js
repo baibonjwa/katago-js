@@ -2,6 +2,7 @@
 
 var GraphModelWrapper = function() {
     this.model = null;
+    this.version = 8;
 };
 
 GraphModelWrapper.prototype.AUTO = 0;
@@ -43,6 +44,7 @@ GraphModelWrapper.prototype.downloadModel = function(charp) {
         tf.loadGraphModel(model + "/model.json")
             .then((function(model) {
                 this.model = model;
+                // TODO - this.versionの更新
                 wakeUp(1);
             }).bind(this))
             .catch(function(error) {
@@ -61,7 +63,7 @@ GraphModelWrapper.prototype.predict = function(
     inputBuffer, boardWxH, inputBufferChannels,
     inputGlobalBuffer, inputGlobalBufferChannels,
     symmetriesBuffer, symmetriesBufferLength,
-    values, miscvalues, ownerships, bonusbelieves, scorebelieves, policies) {
+    values, miscvalues, ownerships, policies) {
     return Asyncify.handleSleep(function(wakeUp) {
         try {
             const bin_inputs = new Float32Array(Module.HEAPF32.buffer, inputBuffer, batches * boardWxH * inputBufferChannels);
@@ -77,6 +79,7 @@ GraphModelWrapper.prototype.predict = function(
                 "swa_model/symmetries": tf.tensor(symmetries, [symmetriesBufferLength], 'bool'),
             }).then(function(results) {
                 var i;
+                const miscvaluesSize = this.version === 8 ? 10 : 6;
                 for (i = 0; i < results.length; i++) {
                     const result = results[i];
                     const data = result.dataSync();
@@ -84,17 +87,11 @@ GraphModelWrapper.prototype.predict = function(
                         case 3: //value
                         Module.HEAPF32.set(data, values / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
-                        case 6: // miscvalues
+                        case miscvaluesSize: // miscvalues
                         Module.HEAPF32.set(data, miscvalues / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
                         case boardWxH: // ownership
                         Module.HEAPF32.set(data, ownerships / Module.HEAPF32.BYTES_PER_ELEMENT);
-                        break;
-                        case 61:  // bonusbelief
-                        Module.HEAPF32.set(data, bonusbelieves / Module.HEAPF32.BYTES_PER_ELEMENT);
-                        break;
-                        case boardWxH * 2 + 120: // scorebelief
-                        Module.HEAPF32.set(data, scorebelieves / Module.HEAPF32.BYTES_PER_ELEMENT);
                         break;
                         case (boardWxH + 1) * 2: // policy
                         Module.HEAPF32.set(data, policies / Module.HEAPF32.BYTES_PER_ELEMENT);

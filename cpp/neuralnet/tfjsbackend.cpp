@@ -11,7 +11,7 @@ extern "C" {
   extern int setBackend(int);
   extern int downloadModel(int);
   extern void removeModel();
-  extern int predict(int, int, int, int, int, int, int, int, int, int, int, int, int, int);
+  extern int predict(int, int, int, int, int, int, int, int, int, int, int, int);
   extern int jsGetModelVersion();
 }
 
@@ -59,12 +59,20 @@ struct LoadedModel {
        So you need to load the tfjs model in NNEvaluator thread.
     */
     name = fileName;
-    modelDesc.version = 5;
-    modelDesc.numInputChannels = 22;
-    modelDesc.numInputGlobalChannels = 14;
-    modelDesc.numValueChannels = 3;
-    modelDesc.numOwnershipChannels = 1;
-    modelDesc.numScoreValueChannels = 2;
+    modelDesc.version = 8;
+    if (modelDesc.version == 8) {
+      modelDesc.numInputChannels = 22;
+      modelDesc.numInputGlobalChannels = 19;
+      modelDesc.numValueChannels = 3;
+      modelDesc.numOwnershipChannels = 1;
+      modelDesc.numScoreValueChannels = 2;
+    } else if (modelDesc.version == 5) {
+      modelDesc.numInputChannels = 22;
+      modelDesc.numInputGlobalChannels = 14;
+      modelDesc.numValueChannels = 3;
+      modelDesc.numOwnershipChannels = 1;
+      modelDesc.numScoreValueChannels = 2;
+    }
   }
 
   LoadedModel() = delete;
@@ -291,10 +299,8 @@ void NeuralNet::getOutput(
   int nnYLen = gpuHandle->nnYLen;
   int version = gpuHandle->model->modelDesc.version;
   float values[batchSize][3];
-  float miscvalues[batchSize][6];
+  float miscvalues[batchSize][10];
   float ownerships[batchSize][361];
-  float bonusbelieves[batchSize][61];
-  float scorebelieves[batchSize][842];
   float policies[batchSize][724];
 
   clock_t start = clock();
@@ -310,8 +316,6 @@ void NeuralNet::getOutput(
     (int)values,
     (int)miscvalues,
     (int)ownerships,
-    (int)bonusbelieves,
-    (int)scorebelieves,
     (int)policies
   ) != 1) {
     cerr << "predict error " << endl;
@@ -341,31 +345,39 @@ void NeuralNet::getOutput(
 
     int numValueChannels = gpuHandle->model->modelDesc.numValueChannels;
     assert(numValueChannels == 3);
-    output->whiteWinProb = value[0];
-    output->whiteLossProb = value[1];
-    output->whiteNoResultProb = value[2];
+    output->whiteWinProb = value[row * numValueChannels];
+    output->whiteLossProb = value[row * numValueChannels + 1];
+    output->whiteNoResultProb = value[row * numValueChannels + 2];
 
     //As above, these are NOT actually from white's perspective, but rather the player to move.
     //As usual the client does the postprocessing.
     if(output->whiteOwnerMap != NULL) {
       assert(gpuHandle->model->modelDesc.numOwnershipChannels == 1);
       std::copy(
-        ownership,
-        ownership + nnXLen * nnYLen,
+        ownership + row * nnXLen * nnYLen,
+        ownership + (row+1) * nnXLen * nnYLen,
         output->whiteOwnerMap
       );
     }
 
+    if(version >= 8) {
+      int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
+      assert(numScoreValueChannels == 4);
+      output->whiteScoreMean = miscvalue[row * numScoreValueChannels];
+      output->whiteScoreMeanSq = miscvalue[row * numScoreValueChannels + 1];
+      output->whiteLead = miscvalue[row * numScoreValueChannels + 2];
+      output->varTimeLeft = miscvalue[row * numScoreValueChannels + 3];
+    }
     if(version >= 4) {
       int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
       assert(numScoreValueChannels == 2);
-      output->whiteScoreMean = miscvalue[0];
-      output->whiteScoreMeanSq = miscvalue[1];
+      output->whiteScoreMean = miscvalue[row * numScoreValueChannels];
+      output->whiteScoreMeanSq = miscvalue[row * numScoreValueChannels + 1];
     }
     else if(version >= 3) {
       int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
       assert(numScoreValueChannels == 1);
-      output->whiteScoreMean = miscvalue[0];
+      output->whiteScoreMean = miscvalue[row * numScoreValueChannels];
       //Version 3 neural nets don't have any second moment output, implicitly already folding it in, so we just use the mean squared
       output->whiteScoreMeanSq = output->whiteScoreMean * output->whiteScoreMean;
     }
