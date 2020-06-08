@@ -59,7 +59,7 @@ struct LoadedModel {
        So you need to load the tfjs model in NNEvaluator thread.
     */
     name = fileName;
-    modelDesc.version = 8;
+    modelDesc.version = 5;
     if (modelDesc.version == 8) {
       modelDesc.numInputChannels = 22;
       modelDesc.numInputGlobalChannels = 19;
@@ -200,7 +200,10 @@ ComputeContext* NeuralNet::createComputeContext(
   enabled_t useNHWCMode,
   const LoadedModel* loadedModel
 ) {
-  return new ComputeContext(cfg, logger);
+  ComputeContext* context = new ComputeContext(cfg, logger);
+  context->nnXLen = nnXLen;
+  context->nnYLen = nnYLen;
+  return context;
 }
 
 void NeuralNet::freeComputeContext(ComputeContext* computeContext) {
