@@ -59,13 +59,13 @@ struct LoadedModel {
        So you need to load the tfjs model in NNEvaluator thread.
     */
     name = fileName;
-    modelDesc.version = 5;
+    modelDesc.version = 8;
     if (modelDesc.version == 8) {
       modelDesc.numInputChannels = 22;
       modelDesc.numInputGlobalChannels = 19;
       modelDesc.numValueChannels = 3;
       modelDesc.numOwnershipChannels = 1;
-      modelDesc.numScoreValueChannels = 2;
+      modelDesc.numScoreValueChannels = 4;
     } else if (modelDesc.version == 5) {
       modelDesc.numInputChannels = 22;
       modelDesc.numInputGlobalChannels = 14;
@@ -370,8 +370,7 @@ void NeuralNet::getOutput(
       output->whiteScoreMeanSq = miscvalue[row * numScoreValueChannels + 1];
       output->whiteLead = miscvalue[row * numScoreValueChannels + 2];
       output->varTimeLeft = miscvalue[row * numScoreValueChannels + 3];
-    }
-    if(version >= 4) {
+    } else if(version >= 4) {
       int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
       assert(numScoreValueChannels == 2);
       output->whiteScoreMean = miscvalue[row * numScoreValueChannels];

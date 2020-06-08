@@ -2,6 +2,7 @@
 
 var GraphModelWrapper = function() {
     this.model = null;
+    // TODO - modelのメタデータ対応
     this.version = 8;
 };
 
@@ -108,7 +109,7 @@ GraphModelWrapper.prototype.predict = function(
 };
 
 GraphModelWrapper.prototype.getModelVersion = function() {
-    return 5;
+    return this.version;
 };
 
 if (Module['ENVIRONMENT_IS_PTHREAD']) {
