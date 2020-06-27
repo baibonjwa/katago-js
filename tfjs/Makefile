@@ -45,6 +45,7 @@ $(TARGET): $(SAVED_MODEL2)
 	    --saved_model_tags=serve \
 	    $(SAVED_MODEL2_DIR) \
 	    $(TARGET_DIR)
+	echo "{\"version\":8}" > $(TARGET_DIR)/metadata.json
 
 clean:
 	rm -rf $(SAVED_MODEL_DIR) $(TMP_DIR) $(SAVED_MODEL2_DIR) $(TARGET_DIR)

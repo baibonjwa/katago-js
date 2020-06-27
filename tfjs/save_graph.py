@@ -55,7 +55,6 @@ if __name__ == "__main__":
                 'swa_model/policy_output': model.policy_output,
                 'swa_model/value_output': model.value_output,
                 'swa_model/miscvalues_output': model.miscvalues_output,
-                'swa_model/scorebelief_output': model.scorebelief_output,
                 'swa_model/ownership_output': model.ownership_output,
             }
         )

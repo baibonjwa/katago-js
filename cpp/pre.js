@@ -1,5 +1,24 @@
 // The reason why ES5 is https://github.com/emscripten-core/emscripten/issues/9190
 
+function loadJSON(url) {
+    return new Promise(function(res, rej) {
+        const request = new XMLHttpRequest();
+        request.responseType = "json";
+        request.open("GET", url);
+        request.addEventListener("load", function() {
+            console.log(request);
+            res(request.response);
+        });
+        request.addEventListener("error", function() {
+            rej(request.statusText);
+        });
+        request.addEventListener("abort", function() {
+            rej(request.statusText);
+        });
+        request.send();
+    });
+}
+
 var GraphModelWrapper = function() {
     this.model = null;
     // TODO - modelのメタデータ対応
@@ -42,16 +61,21 @@ GraphModelWrapper.prototype.setBackend = function(backend) {
 GraphModelWrapper.prototype.downloadModel = function(charp) {
     return Asyncify.handleSleep((function(wakeUp) {
         const model = UTF8ToString(charp);
-        tf.loadGraphModel(model + "/model.json")
-            .then((function(model) {
-                this.model = model;
-                // TODO - this.versionの更新
-                wakeUp(1);
-            }).bind(this))
-            .catch(function(error) {
-                console.error(error);
-                wakeUp(0);
-            });
+        Promise.all([
+            loadJSON(model + "/metadata.json")
+                .then((function(json) {
+                    this.version = json.version;
+                }).bind(this)),
+            tf.loadGraphModel(model + "/model.json")
+                .then((function(model) {
+                    this.model = model;
+                }).bind(this))
+        ]).then(function() {
+            wakeUp(1);
+        }).catch(function(errors) {
+            console.log(errors);
+            wakeUp(0);
+        });
     }).bind(this));
 };
 
