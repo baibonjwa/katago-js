@@ -28,12 +28,12 @@ if __name__ == "__main__":
         with tf.compat.v1.variable_scope(name_scope):
             model = Model(model_config,pos_len,{
                   "is_training": tf.constant(False,dtype=tf.bool),
-                  "include_history": tf.constant(1.0, shape=[1,5], dtype=tf.float32)
+                  "include_history": np.array([[1.0, 1.0, 1.0, 1.0, 1.0]], dtype="float32")
             })
     else:
         model = Model(model_config,pos_len,{
                   "is_training": tf.constant(False,dtype=tf.bool),
-                  "include_history": tf.constant(1.0, shape=[1,5], dtype=tf.float32)
+                  "include_history": np.array([[1.0, 1.0, 1.0, 1.0, 1.0]], dtype="float32")
         })
 
     saver = tf.compat.v1.train.Saver(

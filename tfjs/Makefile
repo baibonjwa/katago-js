@@ -39,11 +39,11 @@ $(OPTIMIZED_MODEL): $(FROZEN_MODEL)
 $(SAVED_MODEL2): $(OPTIMIZED_MODEL)
 	python restore_saved_model.py $(OPTIMIZED_MODEL) $(SAVED_MODEL2_DIR)
 
-$(TARGET): $(SAVED_MODEL2)
+$(TARGET): $(SAVED_MODEL)
 	tensorflowjs_converter \
 	    --input_format=tf_saved_model \
 	    --saved_model_tags=serve \
-	    $(SAVED_MODEL2_DIR) \
+	    $(SAVED_MODEL_DIR) \
 	    $(TARGET_DIR)
 	echo "{\"version\":8}" > $(TARGET_DIR)/metadata.json
 
