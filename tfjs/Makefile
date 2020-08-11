@@ -21,7 +21,8 @@ TARGET = $(TARGET_DIR)/model.json
 
 all: $(TARGET)
 
-$(SAVED_MODEL):
+$(SAVED_MODEL): Makefile
+	rm -r $(SAVED_MODEL_DIR)
 	python save_graph.py -name-scope swa_model -model-variables-prefix ../models/$(MODEL)/saved_model/variables/variables -model-config-json ../models/$(MODEL)/model.config.json -board-size $(SIZE)
 
 $(FROZEN_MODEL): $(SAVED_MODEL)
