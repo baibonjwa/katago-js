@@ -137,7 +137,7 @@ GraphModelWrapper.prototype.getModelVersion = function() {
 };
 
 if (Module['ENVIRONMENT_IS_PTHREAD']) {
-    importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.2.6/dist/tf.min.js");
+    importScripts("https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.3.0/dist/tf.min.js");
     if (typeof OffscreenCanvas !== 'undefined') {
         self.document = {
             createElement: function() {
