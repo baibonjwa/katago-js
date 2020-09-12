@@ -1,5 +1,7 @@
 # use latest-upstream of emscripten
-source ${HOME}/OpenSources/emsdk/emsdk_env.sh
+pushd ${HOME}/OpenSources/emsdk
+source emsdk_env.sh
+popd
 
 build_dir=em_build
 src_dir=../cpp
