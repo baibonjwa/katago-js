@@ -18,7 +18,7 @@ extern "C" {
 using namespace std;
 
 struct ComputeContext {
-  int backend = 0; // auto: 0, cpu: 1, webgl: 2
+  int backend = 0; // auto: 0, cpu: 1, webgl: 2, wasm: 3
   int nnXLen;
   int nnYLen;
 
@@ -30,6 +30,8 @@ struct ComputeContext {
         backend = 1;
       } else if(tfjsBackend == "webgl") {
         backend = 2;
+      } else if(tfjsBackend == "wasm") {
+        backend = 3;
       }
     } else {
       logger->write("backend: auto");
@@ -243,7 +245,25 @@ ComputeHandle* NeuralNet::createComputeHandle(
   (void)requireExactNNLen;
   (void)inputsUseNHWC;
   (void)gpuIdxForThisThread;
-  setBackend(context->backend);
+  if (setBackend(context->backend) == 1) {
+    logger->write("backend was initialized");
+  } else {
+    logger->write("backend initialization failed");
+  }
+  auto backend = getBackend();
+  switch (backend) {
+    case 1:
+    logger->write("backend: cpu");
+    break;
+    case 2:
+    logger->write("backend: webgl");
+    break;
+    case 3:
+    logger->write("backend: wasm");
+    break;
+    default:
+    logger->write("backend: unkown");
+  }
   if (downloadModel((int)loadedModel->name.c_str()) == 1) {
     return new ComputeHandle(loadedModel, context->nnXLen, context->nnYLen);
   } else {
