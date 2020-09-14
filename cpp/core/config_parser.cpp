@@ -45,8 +45,8 @@ void ConfigParser::initialize(const string& fname) {
   ifstream in(fname);
   if(!in.is_open())
     throw IOError("Could not open config file: " + fname);
-  initializeInternal(in);
   fileName = fname;
+  initializeInternal(in);
   initialized = true;
 }
 
@@ -88,6 +88,8 @@ void ConfigParser::initializeInternal(istream& in) {
 
     string key = Global::trim(line.substr(0,pos));
     string value = Global::trim(line.substr(pos+1));
+    if(keyValues.find(key) != keyValues.end())
+      throw IOError("Key '" + key + "' + was specified multiple times in " + fileName + ", you probably didn't mean to do this, please delete one of them");
     keyValues[key] = value;
   }
   contents = contentStream.str();
@@ -102,6 +104,25 @@ string ConfigParser::getFileName() const {
 
 string ConfigParser::getContents() const {
   return contents;
+}
+
+void ConfigParser::unsetUsedKey(const string& key) {
+  std::lock_guard<std::mutex> lock(usedKeysMutex);
+  usedKeys.erase(key);
+}
+
+void ConfigParser::applyAlias(const string& mapThisKey, const string& toThisKey) {
+  if(contains(mapThisKey) && contains(toThisKey))
+    throw IOError("Cannot specify both " + mapThisKey + " and " + toThisKey + " in the same config");
+  if(contains(mapThisKey)) {
+    keyValues[toThisKey] = keyValues[mapThisKey];
+    keyValues.erase(mapThisKey);
+    std::lock_guard<std::mutex> lock(usedKeysMutex);
+    if(usedKeys.find(mapThisKey) != usedKeys.end()) {
+      usedKeys.insert(toThisKey);
+      usedKeys.erase(mapThisKey);
+    }
+  }
 }
 
 void ConfigParser::overrideKeys(const map<string, string>& newkvs) {

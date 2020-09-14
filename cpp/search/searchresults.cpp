@@ -167,15 +167,25 @@ bool Search::getPlaySelectionValuesAlreadyLocked(
   if(numChildren == 0) {
     if(nnOutput == nullptr || &node != rootNode || !allowDirectPolicyMoves)
       return false;
-    for(int movePos = 0; movePos<policySize; movePos++) {
-      Loc moveLoc = NNPos::posToLoc(movePos,rootBoard.x_size,rootBoard.y_size,nnXLen,nnYLen);
-      float* policyProbs = nnOutput->getPolicyProbsMaybeNoised();
-      double policyProb = policyProbs[movePos];
-      if(!rootHistory.isLegal(rootBoard,moveLoc,rootPla) || policyProb < 0 || !isAllowedRootMove(moveLoc))
+
+    bool obeyAllowedRootMove = true;
+    while(true) {
+      for(int movePos = 0; movePos<policySize; movePos++) {
+        Loc moveLoc = NNPos::posToLoc(movePos,rootBoard.x_size,rootBoard.y_size,nnXLen,nnYLen);
+        float* policyProbs = nnOutput->getPolicyProbsMaybeNoised();
+        double policyProb = policyProbs[movePos];
+        if(!rootHistory.isLegal(rootBoard,moveLoc,rootPla) || policyProb < 0 || (obeyAllowedRootMove && !isAllowedRootMove(moveLoc)))
+          continue;
+        locs.push_back(moveLoc);
+        playSelectionValues.push_back(policyProb);
+        numChildren++;
+      }
+      //Still no children? Then at this point just ignore isAllowedRootMove.
+      if(numChildren == 0 && obeyAllowedRootMove) {
+        obeyAllowedRootMove = false;
         continue;
-      locs.push_back(moveLoc);
-      playSelectionValues.push_back(policyProb);
-      numChildren++;
+      }
+      break;
     }
   }
 
@@ -643,11 +653,11 @@ void Search::printRootEndingScoreValueBonus(ostream& out) const {
   }
 }
 
-void Search::appendPV(vector<Loc>& buf, vector<Loc>& scratchLocs, vector<double>& scratchValues, const SearchNode* n, int maxDepth) const {
-  appendPVForMove(buf,scratchLocs,scratchValues,n,Board::NULL_LOC,maxDepth);
+void Search::appendPV(vector<Loc>& buf, vector<int64_t>& visitsBuf, vector<Loc>& scratchLocs, vector<double>& scratchValues, const SearchNode* n, int maxDepth) const {
+  appendPVForMove(buf,visitsBuf,scratchLocs,scratchValues,n,Board::NULL_LOC,maxDepth);
 }
 
-void Search::appendPVForMove(vector<Loc>& buf, vector<Loc>& scratchLocs, vector<double>& scratchValues, const SearchNode* n, Loc move, int maxDepth) const {
+void Search::appendPVForMove(vector<Loc>& buf, vector<int64_t>& visitsBuf, vector<Loc>& scratchLocs, vector<double>& scratchValues, const SearchNode* n, Loc move, int maxDepth) const {
   if(n == NULL)
     return;
 
@@ -692,16 +702,22 @@ void Search::appendPVForMove(vector<Loc>& buf, vector<Loc>& scratchLocs, vector<
     n = node.children[bestChildIdx];
     lock.unlock();
 
+    while(n->statsLock.test_and_set(std::memory_order_acquire));
+    int64_t visits = n->stats.visits;
+    n->statsLock.clear(std::memory_order_release);
+
     buf.push_back(bestChildMoveLoc);
+    visitsBuf.push_back(visits);
   }
 }
 
 
 void Search::printPV(ostream& out, const SearchNode* n, int maxDepth) const {
   vector<Loc> buf;
+  vector<int64_t> visitsBuf;
   vector<Loc> scratchLocs;
   vector<double> scratchValues;
-  appendPV(buf,scratchLocs,scratchValues,n,maxDepth);
+  appendPV(buf,visitsBuf,scratchLocs,scratchValues,n,maxDepth);
   printPV(out,buf);
 }
 
@@ -783,7 +799,9 @@ AnalysisData Search::getAnalysisDataOfSingleChild(
 
   data.pv.clear();
   data.pv.push_back(move);
-  appendPV(data.pv, scratchLocs, scratchValues, child, maxPVDepth);
+  data.pvVisits.clear();
+  data.pvVisits.push_back(numVisits);
+  appendPV(data.pv, data.pvVisits, scratchLocs, scratchValues, child, maxPVDepth);
 
   data.node = child;
 
@@ -949,9 +967,10 @@ void Search::getAnalysisData(
 
 void Search::printPVForMove(ostream& out, const SearchNode* n, Loc move, int maxDepth) const {
   vector<Loc> buf;
+  vector<int64_t> visitsBuf;
   vector<Loc> scratchLocs;
   vector<double> scratchValues;
-  appendPVForMove(buf,scratchLocs,scratchValues,n,move,maxDepth);
+  appendPVForMove(buf,visitsBuf,scratchLocs,scratchValues,n,move,maxDepth);
   for(int i = 0; i<buf.size(); i++) {
     if(i > 0)
       out << " ";

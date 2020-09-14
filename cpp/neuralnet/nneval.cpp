@@ -66,7 +66,8 @@ NNEvaluator::NNEvaluator(
   int nnCacheSizePowerOfTwo,
   int nnMutexPoolSizePowerofTwo,
   bool skipNeuralNet,
-  string openCLTunerFile,
+  const string& openCLTunerFile,
+  const string& homeDataDirOverride,
   bool openCLReTunePerBoardSize,
   enabled_t useFP16Mode,
   enabled_t useNHWCMode,
@@ -103,6 +104,8 @@ NNEvaluator::NNEvaluator(
    serverWaitingForBatchStart(),
    bufferMutex(),
    isKilled(false),
+   numServerThreadsStartingUp(0),
+   mainThreadWaitingForSpawn(),
    currentDoRandomize(doRandomize),
    currentDefaultSymmetry(defaultSymmetry),
    m_resultBufss(NULL),
@@ -142,7 +145,9 @@ NNEvaluator::NNEvaluator(
     modelVersion = NeuralNet::getModelVersion(loadedModel);
     inputsVersion = NNModelVersion::getInputsVersion(modelVersion);
     computeContext = NeuralNet::createComputeContext(
-      gpuIdxs,cfg,logger,nnXLen,nnYLen,openCLTunerFile,openCLReTunePerBoardSize,usingFP16Mode,usingNHWCMode,loadedModel
+      gpuIdxs,cfg,logger,nnXLen,nnYLen,
+      openCLTunerFile,homeDataDirOverride,openCLReTunePerBoardSize,
+      usingFP16Mode,usingNHWCMode,loadedModel
     );
   }
   else {
@@ -267,7 +272,8 @@ void NNEvaluator::clearCache() {
 static void serveEvals(
   string randSeedThisThread,
   NNEvaluator* nnEval, const LoadedModel* loadedModel,
-  int gpuIdxForThisThread
+  int gpuIdxForThisThread,
+  int serverThreadIdx
 ) {
   NNServerBuf* buf = new NNServerBuf(*nnEval,loadedModel);
   Rand rand(randSeedThisThread);
@@ -275,22 +281,35 @@ static void serveEvals(
   //Used to have a try catch around this but actually we're in big trouble if this raises an exception
   //and causes possibly the only nnEval thread to die, so actually go ahead and let the exception escape to
   //toplevel for easier debugging
-  nnEval->serve(*buf,rand,gpuIdxForThisThread);
+  nnEval->serve(*buf,rand,gpuIdxForThisThread,serverThreadIdx);
   delete buf;
+}
+
+void NNEvaluator::setNumThreads(const vector<int>& gpuIdxByServerThr) {
+  if(serverThreads.size() != 0)
+    throw StringError("NNEvaluator::setNumThreads called when threads were already running!");
+  numThreads = gpuIdxByServerThr.size();
+  gpuIdxByServerThread = gpuIdxByServerThr;
 }
 
 void NNEvaluator::spawnServerThreads() {
   if(serverThreads.size() != 0)
     throw StringError("NNEvaluator::spawnServerThreads called when threads were already running!");
+
+  numServerThreadsStartingUp = numThreads;
   for(int i = 0; i<numThreads; i++) {
     int gpuIdxForThisThread = gpuIdxByServerThread[i];
     string randSeedThisThread = randSeed + ":NNEvalServerThread:" + Global::intToString(numServerThreadsEverSpawned);
     numServerThreadsEverSpawned++;
     std::thread* thread = new std::thread(
-      &serveEvals,randSeedThisThread,this,loadedModel,gpuIdxForThisThread
+      &serveEvals,randSeedThisThread,this,loadedModel,gpuIdxForThisThread,i
     );
     serverThreads.push_back(thread);
   }
+
+  unique_lock<std::mutex> lock(bufferMutex);
+  while(numServerThreadsStartingUp > 0)
+    mainThreadWaitingForSpawn.wait(lock);
 }
 
 void NNEvaluator::killServerThreads() {
@@ -311,7 +330,8 @@ void NNEvaluator::killServerThreads() {
 
 void NNEvaluator::serve(
   NNServerBuf& buf, Rand& rand,
-  int gpuIdxForThisThread
+  int gpuIdxForThisThread,
+  int serverThreadIdx
 ) {
 
   ComputeHandle* gpuHandle = NULL;
@@ -326,7 +346,8 @@ void NNEvaluator::serve(
       maxNumRows,
       requireExactNNLen,
       inputsUseNHWC,
-      gpuIdxForThisThread
+      gpuIdxForThisThread,
+      serverThreadIdx
     );
 
   #if defined(__EMSCRIPTEN__)
@@ -336,6 +357,13 @@ void NNEvaluator::serve(
     status = 3;
   }
   #endif
+
+  {
+    lock_guard<std::mutex> lock(bufferMutex);
+    numServerThreadsStartingUp--;
+    if(numServerThreadsStartingUp <= 0)
+      mainThreadWaitingForSpawn.notify_all();
+  }
 
   vector<NNOutput*> outputBuf;
 
@@ -434,14 +462,6 @@ void NNEvaluator::serve(
       continue;
     }
 
-    int symmetry = defaultSymmetry;
-    if(doRandomize)
-      symmetry = rand.nextUInt(NNInputs::NUM_SYMMETRY_COMBINATIONS);
-    bool* symmetriesBuffer = NeuralNet::getSymmetriesInplace(buf.inputBuffers);
-    symmetriesBuffer[0] = (symmetry & 0x1) != 0;
-    symmetriesBuffer[1] = (symmetry & 0x2) != 0;
-    symmetriesBuffer[2] = (symmetry & 0x4) != 0;
-
     outputBuf.clear();
     for(int row = 0; row<numRows; row++) {
       NNOutput* emptyOutput = new NNOutput();
@@ -455,24 +475,11 @@ void NNEvaluator::serve(
       outputBuf.push_back(emptyOutput);
     }
 
-    int numSpatialFeatures = NNModelVersion::getNumSpatialFeatures(modelVersion);
-    int numGlobalFeatures = NNModelVersion::getNumGlobalFeatures(modelVersion);
-    int rowSpatialLen = numSpatialFeatures * nnXLen * nnYLen;
-    int rowGlobalLen = numGlobalFeatures;
-    assert(rowSpatialLen == NeuralNet::getBatchEltSpatialLen(buf.inputBuffers));
-    assert(rowGlobalLen == NeuralNet::getBatchEltGlobalLen(buf.inputBuffers));
+    int symmetry = defaultSymmetry;
+    if(doRandomize)
+      symmetry = rand.nextUInt(NNInputs::NUM_SYMMETRY_COMBINATIONS);
 
-    for(int row = 0; row<numRows; row++) {
-      float* rowSpatialInput = NeuralNet::getBatchEltSpatialInplace(buf.inputBuffers,row);
-      float* rowGlobalInput = NeuralNet::getBatchEltGlobalInplace(buf.inputBuffers,row);
-
-      const float* rowSpatial = buf.resultBufs[row]->rowSpatial;
-      const float* rowGlobal = buf.resultBufs[row]->rowGlobal;
-      std::copy(rowSpatial,rowSpatial+rowSpatialLen,rowSpatialInput);
-      std::copy(rowGlobal,rowGlobal+rowGlobalLen,rowGlobalInput);
-    }
-
-    NeuralNet::getOutput(gpuHandle, buf.inputBuffers, numRows, outputBuf);
+    NeuralNet::getOutput(gpuHandle, buf.inputBuffers, numRows, buf.resultBufs, symmetry, outputBuf);
     assert(outputBuf.size() == numRows);
 
     m_numRowsProcessed.fetch_add(numRows, std::memory_order_relaxed);

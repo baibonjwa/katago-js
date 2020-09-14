@@ -16,6 +16,7 @@ NNEvaluator* Setup::initializeNNEvaluator(
   Logger& logger,
   Rand& seedRand,
   int maxConcurrentEvals,
+  int expectedConcurrentEvals,
   int defaultNNXLen,
   int defaultNNYLen,
   int defaultMaxBatchSize,
@@ -23,7 +24,7 @@ NNEvaluator* Setup::initializeNNEvaluator(
 ) {
   vector<NNEvaluator*> nnEvals =
     initializeNNEvaluators(
-      {nnModelName},{nnModelFile},cfg,logger,seedRand,maxConcurrentEvals,defaultNNXLen,defaultNNYLen,defaultMaxBatchSize,setupFor
+      {nnModelName},{nnModelFile},cfg,logger,seedRand,maxConcurrentEvals,expectedConcurrentEvals,defaultNNXLen,defaultNNYLen,defaultMaxBatchSize,setupFor
     );
   assert(nnEvals.size() == 1);
   return nnEvals[0];
@@ -36,6 +37,7 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
   Logger& logger,
   Rand& seedRand,
   int maxConcurrentEvals,
+  int expectedConcurrentEvals,
   int defaultNNXLen,
   int defaultNNYLen,
   int defaultMaxBatchSize,
@@ -48,6 +50,8 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
   string backendPrefix = "cuda";
   #elif defined(USE_OPENCL_BACKEND)
   string backendPrefix = "opencl";
+  #elif defined(USE_EIGEN_BACKEND)
+  string backendPrefix = "eigen";
   #elif defined(USE_TFJS_BACKEND)
   string backendPrefix = "tfjs";
   #else
@@ -60,6 +64,8 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
     cfg.markAllKeysUsedWithPrefix("cuda");
   if(backendPrefix != "opencl")
     cfg.markAllKeysUsedWithPrefix("opencl");
+  if(backendPrefix != "eigen")
+    cfg.markAllKeysUsedWithPrefix("eigen");
   if(backendPrefix != "tfjs")
     cfg.markAllKeysUsedWithPrefix("tfjs");
   if(backendPrefix != "dummybackend")
@@ -132,8 +138,30 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
       nnRandSeed = Global::uint64ToString(seedRand.nextUInt64());
     logger.write("nnRandSeed" + idxStr + " = " + nnRandSeed);
 
+#ifndef USE_EIGEN_BACKEND
+    (void)expectedConcurrentEvals;
+    cfg.markAllKeysUsedWithPrefix("numEigenThreadsPerModel");
     int numNNServerThreadsPerModel =
       cfg.contains("numNNServerThreadsPerModel") ? cfg.getInt("numNNServerThreadsPerModel",1,1024) : 1;
+#else
+    cfg.markAllKeysUsedWithPrefix("numNNServerThreadsPerModel");
+    auto getNumCores = [&logger]() {
+      int numCores = (int)std::thread::hardware_concurrency();
+      if(numCores <= 0) {
+        logger.write("Could not determine number of cores on this machine, choosing default parameters as if it were 8");
+        numCores = 8;
+      }
+      return numCores;
+    };
+    int numNNServerThreadsPerModel =
+      cfg.contains("numEigenThreadsPerModel") ? cfg.getInt("numEigenThreadsPerModel",1,1024) :
+      setupFor == SETUP_FOR_DISTRIBUTED ? std::min(expectedConcurrentEvals,getNumCores()) :
+      setupFor == SETUP_FOR_MATCH ? std::min(expectedConcurrentEvals,getNumCores()) :
+      setupFor == SETUP_FOR_ANALYSIS ? std::min(expectedConcurrentEvals,getNumCores()) :
+      setupFor == SETUP_FOR_GTP ? expectedConcurrentEvals :
+      setupFor == SETUP_FOR_BENCHMARK ? expectedConcurrentEvals :
+      cfg.getInt("numEigenThreadsPerModel",1,1024);
+#endif
 
     vector<int> gpuIdxByServerThread;
     for(int j = 0; j<numNNServerThreadsPerModel; j++) {
@@ -173,6 +201,8 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
       else
         gpuIdxByServerThread.push_back(-1);
     }
+
+    string homeDataDirOverride = loadHomeDataDirOverride(cfg);
 
     string openCLTunerFile;
     if(cfg.contains("openclTunerFile"))
@@ -229,6 +259,7 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
       setupFor == SETUP_FOR_ANALYSIS ? 17 :
       cfg.getInt("nnMutexPoolSizePowerOfTwo", -1, 24);
 
+#ifndef USE_EIGEN_BACKEND
     int nnMaxBatchSize;
     if(setupFor == SETUP_FOR_BENCHMARK || setupFor == SETUP_FOR_DISTRIBUTED) {
       nnMaxBatchSize = defaultMaxBatchSize;
@@ -241,6 +272,15 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
     else {
       nnMaxBatchSize = cfg.getInt("nnMaxBatchSize", 1, 65536);
     }
+#else
+    //Large batches don't really help CPUs the way they do GPUs because a single CPU on its own is single-threaded
+    //and doesn't greatly benefit from having a bigger chunk of parallelizable work to do on the large scale.
+    //So we just fix a size here that isn't crazy and saves memory, completely ignore what the user would have
+    //specified for GPUs.
+    int nnMaxBatchSize = 4;
+    cfg.markAllKeysUsedWithPrefix("nnMaxBatchSize");
+    (void)defaultMaxBatchSize;
+#endif
 
     int defaultSymmetry = forcedSymmetry >= 0 ? forcedSymmetry : 0;
 
@@ -259,6 +299,7 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
       nnMutexPoolSizePowerOfTwo,
       debugSkipNeuralNet,
       openCLTunerFile,
+      homeDataDirOverride,
       openCLReTunePerBoardSize,
       useFP16Mode,
       useNHWCMode,
@@ -275,6 +316,15 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
   }
 
   return nnEvals;
+}
+
+string Setup::loadHomeDataDirOverride(
+  ConfigParser& cfg
+){
+  string homeDataDirOverride;
+  if(cfg.contains("homeDataDir"))
+    homeDataDirOverride = cfg.getString("homeDataDir");
+  return homeDataDirOverride;
 }
 
 SearchParams Setup::loadSingleParams(
@@ -480,6 +530,10 @@ vector<SearchParams> Setup::loadParams(
       params.nnPolicyTemperature = cfg.getFloat("nnPolicyTemperature",0.01f,5.0f);
     else
       params.nnPolicyTemperature = 1.0f;
+
+    if(cfg.contains("antiMirror"+idxStr)) params.antiMirror = cfg.getBool("antiMirror"+idxStr);
+    else if(cfg.contains("antiMirror"))   params.antiMirror = cfg.getBool("antiMirror");
+    else                                  params.antiMirror = false;
 
     if(cfg.contains("mutexPoolSize"+idxStr)) params.mutexPoolSize = (uint32_t)cfg.getInt("mutexPoolSize"+idxStr, 1, 1 << 24);
     else if(cfg.contains("mutexPoolSize"))   params.mutexPoolSize = (uint32_t)cfg.getInt("mutexPoolSize",        1, 1 << 24);

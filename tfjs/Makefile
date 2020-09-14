@@ -1,7 +1,8 @@
+DISABLE_SYMMETRIES = true
 MODEL = g170-b6c96-s175395328-d26788732
 # Specify target board size below.
-SIZE = 19
-#SIZE = 7
+#SIZE = 19
+SIZE = 7
 TMP_DIR = tmp
 SAVED_MODEL_DIR = saved_model
 SAVED_MODEL = $(SAVED_MODEL_DIR)/saved_model.pb
@@ -23,7 +24,7 @@ all: $(TARGET)
 
 $(SAVED_MODEL): Makefile
 	rm -rf $(SAVED_MODEL_DIR)
-	python save_graph.py -name-scope swa_model -model-variables-prefix ../models/$(MODEL)/saved_model/variables/variables -model-config-json ../models/$(MODEL)/model.config.json -board-size $(SIZE)
+	python save_graph.py -name-scope swa_model -model-variables-prefix ../models/$(MODEL)/saved_model/variables/variables -model-config-json ../models/$(MODEL)/model.config.json -board-size $(SIZE) -disable-symmetries=$(DISABLE_SYMMETRIES)
 
 $(FROZEN_MODEL): $(SAVED_MODEL)
 	mkdir -p $(TMP_DIR)

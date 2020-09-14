@@ -29,6 +29,10 @@ struct AnalyzeRequest {
   int analysisPVLen;
   bool includeOwnership;
   bool includePolicy;
+  bool includePVVisits;
+
+  vector<int> avoidMoveUntilByLocBlack;
+  vector<int> avoidMoveUntilByLocWhite;
 };
 
 int MainCmds::analysis(int argc, const char* const* argv) {
@@ -38,7 +42,8 @@ int MainCmds::analysis(int argc, const char* const* argv) {
 
   ConfigParser cfg;
   string modelFile;
-  int numAnalysisThreads;
+  bool numAnalysisThreadsCmdlineSpecified;
+  int numAnalysisThreadsCmdline;
   bool quitWithoutWaiting;
 
   try {
@@ -48,18 +53,16 @@ int MainCmds::analysis(int argc, const char* const* argv) {
     cmd.setShortUsageArgLimit();
     cmd.addOverrideConfigArg();
 
-    TCLAP::ValueArg<int> numAnalysisThreadsArg("","analysis-threads","Analysis up to this many positions in parallel",true,0,"THREADS");
+    TCLAP::ValueArg<int> numAnalysisThreadsArg("","analysis-threads","Analyze up to this many positions in parallel. Equivalent to numAnalysisThreads in the config.",false,0,"THREADS");
     TCLAP::SwitchArg quitWithoutWaitingArg("","quit-without-waiting","When stdin is closed, quit quickly without waiting for queued tasks");
     cmd.add(numAnalysisThreadsArg);
     cmd.add(quitWithoutWaitingArg);
     cmd.parse(argc,argv);
 
     modelFile = cmd.getModelFile();
-    numAnalysisThreads = numAnalysisThreadsArg.getValue();
+    numAnalysisThreadsCmdlineSpecified = numAnalysisThreadsArg.isSet();
+    numAnalysisThreadsCmdline = numAnalysisThreadsArg.getValue();
     quitWithoutWaiting = quitWithoutWaitingArg.getValue();
-
-    if(numAnalysisThreads <= 0 || numAnalysisThreads >= 16384)
-      throw StringError("Invalid value for numAnalysisThreads");
 
     cmd.getConfig(cfg);
   }
@@ -67,26 +70,43 @@ int MainCmds::analysis(int argc, const char* const* argv) {
     cerr << "Error: " << e.error() << " for argument " << e.argId() << endl;
     return 1;
   }
+  cfg.applyAlias("numSearchThreadsPerAnalysisThread", "numSearchThreads");
+
+  if(cfg.contains("numAnalysisThreads") && numAnalysisThreadsCmdlineSpecified)
+    throw StringError("When specifying numAnalysisThreads in the config (" + cfg.getFileName() + "), it is redundant and disallowed to also specify it via -analysis-threads");
+
+  const int numAnalysisThreads = numAnalysisThreadsCmdlineSpecified ? numAnalysisThreadsCmdline : cfg.getInt("numAnalysisThreads",1,16384);
+  if(numAnalysisThreads <= 0 || numAnalysisThreads > 16384)
+    throw StringError("Invalid value for numAnalysisThreads: " + Global::intToString(numAnalysisThreads));
 
   Logger logger;
   if(cfg.contains("logFile") && cfg.contains("logDir"))
     throw StringError("Cannot specify both logFile and logDir in config");
   else if(cfg.contains("logFile"))
     logger.addFile(cfg.getString("logFile"));
-  else {
+  else if(cfg.contains("logDir")) {
     MakeDir::make(cfg.getString("logDir"));
     Rand rand;
     logger.addFile(cfg.getString("logDir") + "/" + DateTime::getCompactDateTimeString() + "-" + Global::uint32ToHexString(rand.nextUInt()) + ".log");
   }
 
-  logger.setLogToStderr(true);
+  const bool logToStderr = cfg.contains("logToStderr") ? cfg.getBool("logToStderr") : true;
+  if(logToStderr)
+    logger.setLogToStderr(true);
 
   logger.write("Analysis Engine starting...");
   logger.write(Version::getKataGoVersionForHelp());
+  if(!logToStderr) {
+    cerr << Version::getKataGoVersionForHelp() << endl;
+  }
 
-  auto loadParams = [](ConfigParser& config, SearchParams& params, Player& perspective) {
+  const bool logAllRequests = cfg.contains("logAllRequests") ? cfg.getBool("logAllRequests") : false;
+  const bool logAllResponses = cfg.contains("logAllResponses") ? cfg.getBool("logAllResponses") : false;
+  const bool logSearchInfo = cfg.contains("logSearchInfo") ? cfg.getBool("logSearchInfo") : false;
+
+  auto loadParams = [](ConfigParser& config, SearchParams& params, Player& perspective, Player defaultPerspective) {
     params = Setup::loadSingleParams(config);
-    perspective = Setup::parseReportAnalysisWinrates(config,C_EMPTY);
+    perspective = Setup::parseReportAnalysisWinrates(config,defaultPerspective);
     //Set a default for conservativePass that differs from matches or selfplay
     if(!config.contains("conservativePass") && !config.contains("conservativePass0"))
       params.conservativePass = true;
@@ -94,7 +114,7 @@ int MainCmds::analysis(int argc, const char* const* argv) {
 
   SearchParams defaultParams;
   Player defaultPerspective;
-  loadParams(cfg, defaultParams, defaultPerspective);
+  loadParams(cfg, defaultParams, defaultPerspective, C_EMPTY);
 
   const int analysisPVLen = cfg.contains("analysisPVLen") ? cfg.getInt("analysisPVLen",1,100) : 15;
   const bool assumeMultipleStartingBlackMovesAreHandicap =
@@ -105,9 +125,10 @@ int MainCmds::analysis(int argc, const char* const* argv) {
   {
     Setup::initializeSession(cfg);
     int maxConcurrentEvals = numAnalysisThreads * defaultParams.numThreads * 2 + 16; // * 2 + 16 just to give plenty of headroom
+    int expectedConcurrentEvals = numAnalysisThreads * defaultParams.numThreads;
     int defaultMaxBatchSize = -1;
     nnEval = Setup::initializeNNEvaluator(
-      modelFile,modelFile,cfg,logger,seedRand,maxConcurrentEvals,
+      modelFile,modelFile,cfg,logger,seedRand,maxConcurrentEvals,expectedConcurrentEvals,
       NNPos::MAX_BOARD_LEN,NNPos::MAX_BOARD_LEN,defaultMaxBatchSize,
       Setup::SETUP_FOR_ANALYSIS
     );
@@ -133,13 +154,15 @@ int MainCmds::analysis(int argc, const char* const* argv) {
   logger.write("Loaded model "+ modelFile);
 
   ThreadSafeQueue<string*> toWriteQueue;
-  auto writeLoop = [&toWriteQueue]() {
+  auto writeLoop = [&toWriteQueue,&logAllResponses,&logger]() {
     while(true) {
       string* message;
       bool suc = toWriteQueue.waitPop(message);
       if(!suc)
         break;
       cout << *message << endl;
+      if(logAllResponses)
+        logger.write("Response: " + *message);
       delete message;
     }
   };
@@ -174,7 +197,7 @@ int MainCmds::analysis(int argc, const char* const* argv) {
   };
 
   auto analysisLoop = [
-    &logger,&toAnalyzeQueue,&toWriteQueue,&preventEncore,&pushToWrite,&reportError
+    &logger,&toAnalyzeQueue,&toWriteQueue,&preventEncore,&pushToWrite,&reportError,&logSearchInfo,&nnEval
   ](AsyncBot* bot) {
     while(true) {
       std::pair<std::pair<int,int64_t>,AnalyzeRequest*> analysisItem;
@@ -186,9 +209,15 @@ int MainCmds::analysis(int argc, const char* const* argv) {
       bot->setPosition(request->nextPla,request->board,request->hist);
       bot->setAlwaysIncludeOwnerMap(request->includeOwnership);
       bot->setParams(request->params);
+      bot->setAvoidMoveUntilByLoc(request->avoidMoveUntilByLocBlack,request->avoidMoveUntilByLocWhite);
 
       Player pla = request->nextPla;
       bot->genMoveSynchronous(pla, TimeControls());
+      if(logSearchInfo) {
+        ostringstream sout;
+        PlayUtils::printGenmoveLog(sout,bot,nnEval,Board::NULL_LOC,NAN,request->perspective);
+        logger.write(sout.str());
+      }
 
       json ret;
       ret["id"] = request->id;
@@ -240,6 +269,13 @@ int MainCmds::analysis(int argc, const char* const* argv) {
           pv.push_back(Location::toString(data.pv[j],request->board));
         moveInfo["pv"] = pv;
 
+        if(request->includePVVisits) {
+          assert(data.pvVisits.size() >= pvLen);
+          json pvVisits = json::array();
+          for(int j = 0; j<pvLen; j++)
+            pvVisits.push_back(data.pvVisits[j]);
+          moveInfo["pvVisits"] = pvVisits;
+        }
         moveInfos.push_back(moveInfo);
       }
       ret["moveInfos"] = moveInfos;
@@ -338,21 +374,25 @@ int MainCmds::analysis(int argc, const char* const* argv) {
 
   logger.write("Analyzing up to " + Global::intToString(numAnalysisThreads) + " positions at at time in parallel");
   logger.write("Started, ready to begin handling requests");
-
+  if(!logToStderr) {
+    cerr << "Started, ready to begin handling requests" << endl;
+  }
 
   string line;
   json input;
-  while(cin) {
-    getline(cin,line);
+  while(getline(cin,line)) {
     line = Global::trim(line);
     if(line.length() == 0)
       continue;
+
+    if(logAllRequests)
+      logger.write("Request: " + line);
 
     try {
       input = json::parse(line);
     }
     catch(nlohmann::detail::exception& e) {
-      reportError(e.what());
+      reportError(e.what() + string(" - could not parse input line as json request: ") + line);
       continue;
     }
 
@@ -370,18 +410,22 @@ int MainCmds::analysis(int argc, const char* const* argv) {
 
     //Defaults
     rbase.params = defaultParams;
+    rbase.perspective = defaultPerspective;
     rbase.analysisPVLen = analysisPVLen;
     rbase.includeOwnership = false;
     rbase.includePolicy = false;
+    rbase.includePVVisits = false;
     rbase.priority = 0;
+    rbase.avoidMoveUntilByLocBlack.clear();
+    rbase.avoidMoveUntilByLocWhite.clear();
 
-    auto parseInteger = [&input,&rbase,&reportErrorForId](const char* field, int64_t& buf, int64_t min, int64_t max, const char* errorMessage) {
+    auto parseInteger = [&rbase,&reportErrorForId](const json& dict, const char* field, int64_t& buf, int64_t min, int64_t max, const char* errorMessage) {
       try {
-        if(!input[field].is_number_integer()) {
+        if(!dict[field].is_number_integer()) {
           reportErrorForId(rbase.id, field, errorMessage);
           return false;
         }
-        int64_t x = input[field].get<int64_t>();
+        int64_t x = dict[field].get<int64_t>();
         if(x < min || x > max) {
           reportErrorForId(rbase.id, field, errorMessage);
           return false;
@@ -396,13 +440,13 @@ int MainCmds::analysis(int argc, const char* const* argv) {
       }
     };
 
-    auto parseDouble = [&input,&rbase,&reportErrorForId](const char* field, double& buf, double min, double max, const char* errorMessage) {
+    auto parseDouble = [&rbase,&reportErrorForId](const json& dict, const char* field, double& buf, double min, double max, const char* errorMessage) {
       try {
-        if(!input[field].is_number()) {
+        if(!dict[field].is_number()) {
           reportErrorForId(rbase.id, field, errorMessage);
           return false;
         }
-        double x = input[field].get<double>();
+        double x = dict[field].get<double>();
         if(!isfinite(x) || x < min || x > max) {
           reportErrorForId(rbase.id, field, errorMessage);
           return false;
@@ -417,13 +461,13 @@ int MainCmds::analysis(int argc, const char* const* argv) {
       }
     };
 
-    auto parseBoolean = [&input,&rbase,&reportErrorForId](const char* field, bool& buf, const char* errorMessage) {
+    auto parseBoolean = [&rbase,&reportErrorForId](const json& dict, const char* field, bool& buf, const char* errorMessage) {
       try {
-        if(!input[field].is_boolean()) {
+        if(!dict[field].is_boolean()) {
           reportErrorForId(rbase.id, field, errorMessage);
           return false;
         }
-        buf = input[field].get<bool>();
+        buf = dict[field].get<bool>();
         return true;
       }
       catch(nlohmann::detail::exception& e) {
@@ -431,6 +475,20 @@ int MainCmds::analysis(int argc, const char* const* argv) {
         reportErrorForId(rbase.id, field, errorMessage);
         return false;
       }
+    };
+
+    auto parsePlayer = [&rbase,&reportErrorForId](const json& dict, const char* field, Player& buf) {
+      buf = C_EMPTY;
+      try {
+        string s = dict[field].get<string>();
+        PlayerIO::tryParsePlayer(s,buf);
+      }
+      catch(nlohmann::detail::exception&) {}
+      if(buf != P_BLACK && buf != P_WHITE) {
+        reportErrorForId(rbase.id, field, "Must be \"b\" or \"w\"");
+        return false;
+      }
+      return true;
     };
 
     int boardXSize;
@@ -447,11 +505,11 @@ int MainCmds::analysis(int argc, const char* const* argv) {
         reportErrorForId(rbase.id, "boardYSize", boardSizeError.c_str());
         continue;
       }
-      if(!parseInteger("boardXSize", xBuf, 2, Board::MAX_LEN, boardSizeError.c_str())) {
+      if(!parseInteger(input, "boardXSize", xBuf, 2, Board::MAX_LEN, boardSizeError.c_str())) {
         reportErrorForId(rbase.id, "boardXSize", boardSizeError.c_str());
         continue;
       }
-      if(!parseInteger("boardYSize", yBuf, 2, Board::MAX_LEN, boardSizeError.c_str())) {
+      if(!parseInteger(input, "boardYSize", yBuf, 2, Board::MAX_LEN, boardSizeError.c_str())) {
         reportErrorForId(rbase.id, "boardYSize", boardSizeError.c_str());
         continue;
       }
@@ -459,13 +517,42 @@ int MainCmds::analysis(int argc, const char* const* argv) {
       boardYSize = (int)yBuf;
     }
 
-    auto parseBoardLocs = [&input,boardXSize,boardYSize,&rbase,&reportErrorForId](const char* field, vector<Move>& buf, bool allowPass) {
+    auto parseBoardLocs = [boardXSize,boardYSize,&rbase,&reportErrorForId](const json& dict, const char* field, vector<Loc>& buf, bool allowPass) {
       buf.clear();
-      if(!input[field].is_array()) {
+      if(!dict[field].is_array()) {
+        reportErrorForId(rbase.id, field, "Must be an array of GTP board vertices");
+        return false;
+      }
+      for(auto& elt : dict[field]) {
+        string s;
+        try {
+          s = elt.get<string>();
+        }
+        catch(nlohmann::detail::exception& e) {
+          (void)e;
+          reportErrorForId(rbase.id, field, "Must be an array of GTP board vertices");
+          return false;
+        }
+
+        Loc loc;
+        if(!Location::tryOfString(s, boardXSize, boardYSize, loc) ||
+           (!allowPass && loc == Board::PASS_LOC) ||
+           (loc == Board::NULL_LOC)) {
+          reportErrorForId(rbase.id, field, "Could not parse board location: " + s);
+          return false;
+        }
+        buf.push_back(loc);
+      }
+      return true;
+    };
+
+    auto parseBoardMoves = [boardXSize,boardYSize,&rbase,&reportErrorForId](const json& dict, const char* field, vector<Move>& buf, bool allowPass) {
+      buf.clear();
+      if(!dict[field].is_array()) {
         reportErrorForId(rbase.id, field, "Must be an array of pairs of the form: [\"b\" or \"w\", GTP board vertex]");
         return false;
       }
-      for(auto& elt : input[field]) {
+      for(auto& elt : dict[field]) {
         if(!elt.is_array() || elt.size() != 2) {
           reportErrorForId(rbase.id, field, "Must be an array of pairs of the form: [\"b\" or \"w\", GTP board vertex]");
           return false;
@@ -503,12 +590,12 @@ int MainCmds::analysis(int argc, const char* const* argv) {
 
     vector<Move> placements;
     if(input.find("initialStones") != input.end()) {
-      if(!parseBoardLocs("initialStones", placements, false))
+      if(!parseBoardMoves(input, "initialStones", placements, false))
         continue;
     }
     vector<Move> moveHistory;
     if(input.find("moves") != input.end()) {
-      if(!parseBoardLocs("moves", moveHistory, true))
+      if(!parseBoardMoves(input, "moves", moveHistory, true))
         continue;
     }
     else {
@@ -517,15 +604,9 @@ int MainCmds::analysis(int argc, const char* const* argv) {
     }
     Player initialPlayer = C_EMPTY;
     if(input.find("initialPlayer") != input.end()) {
-      try {
-        string s = input["initialPlayer"].get<string>();
-        PlayerIO::tryParsePlayer(s,initialPlayer);
-      }
-      catch(nlohmann::detail::exception&) {}
-      if(initialPlayer != P_BLACK && initialPlayer != P_WHITE) {
-        reportErrorForId(rbase.id, "initialPlayer", "Must be \"b\" or \"w\"");
+      bool suc = parsePlayer(input, "initialPlayer", initialPlayer);
+      if(!suc)
         continue;
-      }
     }
 
     vector<bool> shouldAnalyze(moveHistory.size()+1,false);
@@ -587,7 +668,7 @@ int MainCmds::analysis(int argc, const char* const* argv) {
       static_assert(Rules::MIN_USER_KOMI == -150.0f, "");
       static_assert(Rules::MAX_USER_KOMI == 150.0f, "");
       const char* msg = "Must be a integer or half-integer from -150.0 to 150.0";
-      bool suc = parseDouble("komi", komi, Rules::MIN_USER_KOMI, Rules::MAX_USER_KOMI, msg);
+      bool suc = parseDouble(input, "komi", komi, Rules::MIN_USER_KOMI, Rules::MAX_USER_KOMI, msg);
       if(!suc)
         continue;
       rules.komi = (float)komi;
@@ -631,7 +712,7 @@ int MainCmds::analysis(int argc, const char* const* argv) {
           //Ignore any unused keys in the ORIGINAL config
           localCfg.markAllKeysUsedWithPrefix("");
           localCfg.overrideKeys(overrideSettings);
-          loadParams(localCfg, rbase.params, rbase.perspective);
+          loadParams(localCfg, rbase.params, rbase.perspective, defaultPerspective);
           SearchParams::failIfParamsDifferOnUnchangeableParameter(defaultParams,rbase.params);
           //Hard failure on unused override keys newly present in the config
           vector<string> unusedKeys = localCfg.unusedKeys();
@@ -648,46 +729,109 @@ int MainCmds::analysis(int argc, const char* const* argv) {
     }
 
     if(input.find("maxVisits") != input.end()) {
-      bool suc = parseInteger("maxVisits", rbase.params.maxVisits, 1, (int64_t)1 << 50, "Must be an integer from 1 to 2^50");
+      bool suc = parseInteger(input, "maxVisits", rbase.params.maxVisits, 1, (int64_t)1 << 50, "Must be an integer from 1 to 2^50");
       if(!suc)
         continue;
     }
 
     if(input.find("analysisPVLen") != input.end()) {
       int64_t buf;
-      bool suc = parseInteger("analysisPVLen", buf, 1, 1000, "Must be an integer from 1 to 1000");
+      bool suc = parseInteger(input, "analysisPVLen", buf, 1, 1000, "Must be an integer from 1 to 1000");
       if(!suc)
         continue;
       rbase.analysisPVLen = (int)buf;
     }
 
     if(input.find("rootFpuReductionMax") != input.end()) {
-      bool suc = parseDouble("rootFpuReductionMax", rbase.params.rootFpuReductionMax, 0.0, 2.0, "Must be a number from 0.0 to 2.0");
+      bool suc = parseDouble(input, "rootFpuReductionMax", rbase.params.rootFpuReductionMax, 0.0, 2.0, "Must be a number from 0.0 to 2.0");
       if(!suc)
         continue;
     }
     if(input.find("rootPolicyTemperature") != input.end()) {
-      bool suc = parseDouble("rootPolicyTemperature", rbase.params.rootPolicyTemperature, 0.01, 100.0, "Must be a number from 0.01 to 100.0");
+      bool suc = parseDouble(input, "rootPolicyTemperature", rbase.params.rootPolicyTemperature, 0.01, 100.0, "Must be a number from 0.01 to 100.0");
       if(!suc)
         continue;
       rbase.params.rootPolicyTemperatureEarly = rbase.params.rootPolicyTemperature;
     }
     if(input.find("includeOwnership") != input.end()) {
-      bool suc = parseBoolean("includeOwnership", rbase.includeOwnership, "Must be a boolean");
+      bool suc = parseBoolean(input, "includeOwnership", rbase.includeOwnership, "Must be a boolean");
       if(!suc)
         continue;
     }
     if(input.find("includePolicy") != input.end()) {
-      bool suc = parseBoolean("includePolicy", rbase.includePolicy, "Must be a boolean");
+      bool suc = parseBoolean(input, "includePolicy", rbase.includePolicy, "Must be a boolean");
+      if(!suc)
+        continue;
+    }
+    if(input.find("includePVVisits") != input.end()) {
+      bool suc = parseBoolean(input, "includePVVisits", rbase.includePVVisits, "Must be a boolean");
       if(!suc)
         continue;
     }
     if(input.find("priority") != input.end()) {
       int64_t buf;
-      bool suc = parseInteger("priority", buf, -0x7FFFFFFF,0x7FFFFFFF, "Must be a number from -2,147,483,647 to 2,147,483,647");
+      bool suc = parseInteger(input, "priority", buf, -0x7FFFFFFF,0x7FFFFFFF, "Must be a number from -2,147,483,647 to 2,147,483,647");
       if(!suc)
         continue;
       rbase.priority = (int)buf;
+    }
+
+    bool hasAllowMoves = input.find("allowMoves") != input.end();
+    bool hasAvoidMoves = input.find("avoidMoves") != input.end();
+    if(hasAllowMoves || hasAvoidMoves) {
+      if(hasAllowMoves && hasAvoidMoves) {
+        reportErrorForId(rbase.id, "allowMoves", string("Cannot specify both allowMoves and avoidMoves"));
+        continue;
+      }
+      string field = hasAllowMoves ? "allowMoves" : "avoidMoves";
+      json& avoidParamsList = input[field];
+      if(!avoidParamsList.is_array()) {
+        reportErrorForId(rbase.id, field, string("Must be a list of dicts with subfields 'player', 'moves', 'untilDepth'"));
+        continue;
+      }
+      if(hasAllowMoves && avoidParamsList.size() > 1) {
+        reportErrorForId(rbase.id, field, string("Currently allowMoves only allows one entry"));
+        continue;
+      }
+
+      bool failed = false;
+      for(size_t i = 0; i<avoidParamsList.size(); i++) {
+        json& avoidParams = avoidParamsList[i];
+        if(avoidParams.find("moves") == avoidParams.end() ||
+           avoidParams.find("untilDepth") == avoidParams.end() ||
+           avoidParams.find("player") == avoidParams.end()) {
+          reportErrorForId(rbase.id, field, string("Must be a list of dicts with subfields 'player', 'moves', 'untilDepth'"));
+          failed = true;
+          break;
+        }
+
+        Player avoidPla;
+        vector<Loc> parsedLocs;
+        int64_t untilDepth;
+        bool suc;
+        suc = parsePlayer(avoidParams, "player", avoidPla);
+        if(!suc) { failed = true; break; }
+        suc = parseBoardLocs(avoidParams, "moves", parsedLocs, true);
+        if(!suc) { failed = true; break; }
+        suc = parseInteger(avoidParams, "untilDepth", untilDepth, 1, 1000000000, "Must be a positive integer");
+        if(!suc) { failed = true; break; }
+
+        vector<int>& avoidMoveUntilByLoc = avoidPla == P_BLACK ? rbase.avoidMoveUntilByLocBlack : rbase.avoidMoveUntilByLocWhite;
+        avoidMoveUntilByLoc.resize(Board::MAX_ARR_SIZE);
+        if(hasAllowMoves) {
+          std::fill(avoidMoveUntilByLoc.begin(),avoidMoveUntilByLoc.end(),(int)untilDepth);
+          for(Loc loc: parsedLocs) {
+            avoidMoveUntilByLoc[loc] = 0;
+          }
+        }
+        else {
+          for(Loc loc: parsedLocs) {
+            avoidMoveUntilByLoc[loc] = (int)untilDepth;
+          }
+        }
+      }
+      if(failed)
+        continue;
     }
 
 
@@ -732,7 +876,10 @@ int MainCmds::analysis(int argc, const char* const* argv) {
         newRequest->analysisPVLen = rbase.analysisPVLen;
         newRequest->includeOwnership = rbase.includeOwnership;
         newRequest->includePolicy = rbase.includePolicy;
+        newRequest->includePVVisits = rbase.includePVVisits;
         newRequest->priority = rbase.priority;
+        newRequest->avoidMoveUntilByLocBlack = rbase.avoidMoveUntilByLocBlack;
+        newRequest->avoidMoveUntilByLocWhite = rbase.avoidMoveUntilByLocWhite;
         newRequests.push_back(newRequest);
       }
       if(turnNumber >= moveHistory.size())
@@ -741,6 +888,7 @@ int MainCmds::analysis(int argc, const char* const* argv) {
       Player movePla = moveHistory[turnNumber].pla;
       Loc moveLoc = moveHistory[turnNumber].loc;
       if(movePla != nextPla) {
+        board.clearSimpleKoLoc();
         hist.clear(board,movePla,rules,hist.encorePhase);
         hist.setAssumeMultipleStartingBlackMovesAreHandicap(assumeMultipleStartingBlackMovesAreHandicap);
       }

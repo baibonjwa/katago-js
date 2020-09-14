@@ -8,11 +8,12 @@ server or website.
 
 This engine can be run via:
 
-```./katago analysis -config CONFIG_FILE -model MODEL_FILE -analysis-threads NUM_ANALYSIS_THREADS```
+```./katago analysis -config CONFIG_FILE -model MODEL_FILE```
 
 An example config file is provided in `cpp/configs/analysis_example.cfg`. Adjusting this config is recommended, for example
-setting `cudaUseFP16 = true` and `cudaUseNHWC = true` if you have a GPU with FP16 tensor core support, adjusting
-`nnCacheSizePowerOfTwo` based on how much RAM you have, and adjusting `numSearchThreads` and `NUM_ANALYSIS_THREADS` as desired.
+`nnCacheSizePowerOfTwo` based on how much RAM you have, and adjusting `numSearchThreadsPerAnalysisThread` (the number of MCTS threads operating simultaneously on the same position) and `numAnalysisThreads` (the number of positions that will be analyzed at the same time, *each* of which will use `numSearchThreadsPerAnalysisThread` many search threads).
+
+See the [example analysis config](https://github.com/lightvector/KataGo/blob/master/cpp/configs/analysis_example.cfg#L60) for a fairly detailed discussion of how to tune these parameters.
 
 ### Protocol
 
@@ -82,6 +83,13 @@ Explanation of fields (including some optional fields not present in the above q
    * `rootFpuReductionMax (float)`: Optional. Set this to 0 to make KataGo more willing to try a variety of moves.
    * `includeOwnership (boolean)`: Optional. If true, report ownership prediction as a result. Will double memory usage and reduce performance slightly.
    * `includePolicy (boolean)`: Optional. If true, report neural network raw policy as a result. Will not signficiantly affect performance.
+   * `includePVVisits (boolean)`: Optional. If true, report the number of visits for each move in any reported pv.
+   * `avoidMoves (list of dicts)`: Optional. If true, UNTILDEPTH` - Prohibit the search from exploring the specified moves for the specified player, until a certain number of ply deep in the search. Each dict must contain these fields:
+      * `player` - the player to prohibit, `"B"` or `"W"`.
+      * `moves` - an array of move locations to prohibit, such as `["C3","Q4","pass"]`
+      * `untilDepth` - a positive integer, indicating the ply such that moves are prohibited before that ply.
+      * Multiple dicts can specify different `untilDepth` for different sets of moves. The behavior is unspecified if a move is specified more than once with different `untilDepth`.
+   * `allowMoves (list of dicts)`: Optional. Same as `avoidMoves` except prohibits all moves EXCEPT the moves specified. Currently, the list of dicts must also be length 1.
    * `overrideSettings (object)`: Optional. Specify any number of `paramName:value` entries in this object to override those params from command line `CONFIG_FILE` for this query. Most search parameters can be overriden: `cpuctExploration`, `winLossUtilityFactor`, etc.
    * `priority (int)`: Optional. Analysis threads will prefer handling queries with the highest priority unless already started on another task, breaking ties in favor of earlier queries. If not specified, defaults to 0.
 
@@ -204,6 +212,7 @@ Current fields are:
       * `utilityLcb` - The LCB of the move's utility.
       * `order` - KataGo's ranking of the move. 0 is the best, 1 is the next best, and so on.
       * `pv` - The principal variation following this move. May be of variable length or even empty.
+      * `pvVisits` - The number of visits for each move in `pv`. Exists only if `includePVVisits` is true.
    * `rootInfo`: A JSON dictionary with fields containing overall statistics for the requested turn itself calculated in the same way as they would be for the next moves. Current fields are: `winrate`, `scoreLead`, `scoreSelfplay`, `utility`, `visits`.
    * `ownership` - If `includeOwnership` was true, then this field will be included. It is a JSON array of length `boardYSize * boardXSize` with values from -1 to 1 indicating the predicted ownership. Values are in row-major order, starting at the top-left of the board (e.g. A19) and going to the bottom right (e.g. T1).
    * `policy` - If `includePolicy` was true, then this field will be included. It is a JSON array of length `boardYSize * boardXSize + 1` with positive values summing to 1 indicating the neural network's prediction of the best move before any search, and `-1` indicating illegal moves. Values are in row-major order, starting at the top-left of the board (e.g. A19) and going to the bottom right (e.g. T1). The last value in the array is the policy value for passing.

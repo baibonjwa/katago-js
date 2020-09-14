@@ -57,7 +57,12 @@ string HomeData::getDefaultFilesDirForHelpMessage() {
 
 
 //On Windows, instead of home directory, we just make something inside the directory containing the executable
-string HomeData::getHomeDataDir(bool makeDir) {
+string HomeData::getHomeDataDir(bool makeDir, const string& homeDataDirOverride) {
+  if(homeDataDirOverride != "") {
+    if(makeDir) MakeDir::make(homeDataDirOverride);
+    return homeDataDirOverride;
+  }
+
   //HACK: add 2048 to the buffer size to be resilient to longer paths, beyond MAX_PATH.
   constexpr size_t bufSize = MAX_PATH + 2048;
   wchar_t buf[bufSize];
@@ -100,7 +105,7 @@ vector<string> HomeData::getDefaultFilesDirs() {
     string exeDir = path.parent_path().string();
     ret.push_back(exeDir);
   }
-  ret.push_back(getHomeDataDir(false));
+  ret.push_back(getHomeDataDir(false,""));
   return ret;
 }
 #endif
@@ -110,7 +115,12 @@ string HomeData::getDefaultFilesDirForHelpMessage() {
 }
 
 #if !defined(__EMSCRIPTEN__)
-string HomeData::getHomeDataDir(bool makeDir) {
+string HomeData::getHomeDataDir(bool makeDir, const string& homeDataDirOverride) {
+  if(homeDataDirOverride != "") {
+    if(makeDir) MakeDir::make(homeDataDirOverride);
+    return homeDataDirOverride;
+  }
+
   string homeDataDir;
   const char* home =  getenv("HOME");
   if(home != NULL) {

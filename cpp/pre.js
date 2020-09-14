@@ -98,21 +98,14 @@ GraphModelWrapper.prototype.predict = function(
     batches,
     inputBuffer, boardWxH, inputBufferChannels,
     inputGlobalBuffer, inputGlobalBufferChannels,
-    symmetriesBuffer, symmetriesBufferLength,
     values, miscvalues, ownerships, policies) {
     return Asyncify.handleSleep(function(wakeUp) {
         try {
             const bin_inputs = new Float32Array(Module.HEAPF32.buffer, inputBuffer, batches * boardWxH * inputBufferChannels);
             const global_inputs = new Float32Array(Module.HEAPF32.buffer, inputGlobalBuffer, batches * inputGlobalBufferChannels);
-            const _symmetries = new Int8Array(Module.HEAP8.buffer, symmetriesBuffer, symmetriesBufferLength);
-            const symmetries = new Array(symmetriesBufferLength);
-            for (let i = 0; i < symmetriesBufferLength; i++) {
-                symmetries[i] = _symmetries[i] != 0
-            }
             this.model.executeAsync({
                 "swa_model/bin_inputs": tf.tensor(bin_inputs, [batches, boardWxH, inputBufferChannels], 'float32'),
                 "swa_model/global_inputs": tf.tensor(global_inputs, [batches, inputGlobalBufferChannels], 'float32'),
-                "swa_model/symmetries": tf.tensor(symmetries, [symmetriesBufferLength], 'bool'),
             }).then(function(results) {
                 var i;
                 const miscvaluesSize = this.version === 8 ? 10 : 6;

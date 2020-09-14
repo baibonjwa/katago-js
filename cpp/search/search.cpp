@@ -140,9 +140,13 @@ static const double VALUE_WEIGHT_DEGREES_OF_FREEDOM = 3.0;
 
 Search::Search(SearchParams params, NNEvaluator* nnEval, const string& rSeed)
   :rootPla(P_BLACK),
-   rootBoard(),rootHistory(),rootPassLegal(true),rootHintLoc(Board::NULL_LOC),
+   rootBoard(),rootHistory(),rootHintLoc(Board::NULL_LOC),
+   avoidMoveUntilByLocBlack(),avoidMoveUntilByLocWhite(),
    rootSafeArea(NULL),
    recentScoreCenter(0.0),
+   mirroringPla(C_EMPTY),
+   mirrorAdvantage(0.0),
+   mirrorCenterIsSymmetric(false),
    alwaysIncludeOwnerMap(false),
    searchParams(params),numSearchesBegun(0),searchNodeAge(0),
    plaThatSearchIsFor(C_EMPTY),plaThatSearchIsForLastSearch(C_EMPTY),
@@ -205,6 +209,8 @@ void Search::setPosition(Player pla, const Board& board, const BoardHistory& his
   rootBoard = board;
   rootHistory = history;
   rootKoHashTable->recompute(rootHistory);
+  avoidMoveUntilByLocBlack.clear();
+  avoidMoveUntilByLocWhite.clear();
 }
 
 void Search::setPlayerAndClearHistory(Player pla) {
@@ -213,13 +219,14 @@ void Search::setPlayerAndClearHistory(Player pla) {
   plaThatSearchIsFor = C_EMPTY;
   rootBoard.clearSimpleKoLoc();
   Rules rules = rootHistory.rules;
-
   //Preserve this value even when we get multiple moves in a row by some player
   bool assumeMultipleStartingBlackMovesAreHandicap = rootHistory.assumeMultipleStartingBlackMovesAreHandicap;
   rootHistory.clear(rootBoard,rootPla,rules,rootHistory.encorePhase);
   rootHistory.setAssumeMultipleStartingBlackMovesAreHandicap(assumeMultipleStartingBlackMovesAreHandicap);
 
   rootKoHashTable->recompute(rootHistory);
+  avoidMoveUntilByLocBlack.clear();
+  avoidMoveUntilByLocWhite.clear();
 }
 
 void Search::setKomiIfNew(float newKomi) {
@@ -229,9 +236,12 @@ void Search::setKomiIfNew(float newKomi) {
   }
 }
 
-void Search::setRootPassLegal(bool b) {
+void Search::setAvoidMoveUntilByLoc(const std::vector<int>& bVec, const std::vector<int>& wVec) {
+  if(avoidMoveUntilByLocBlack == bVec && avoidMoveUntilByLocWhite == wVec)
+    return;
   clearSearch();
-  rootPassLegal = b;
+  avoidMoveUntilByLocBlack = bVec;
+  avoidMoveUntilByLocWhite = wVec;
 }
 
 void Search::setRootHintLoc(Loc loc) {
@@ -284,10 +294,11 @@ bool Search::isLegalTolerant(Loc moveLoc, Player movePla) const {
     //we're robust to GTP or an sgf file saying that a move was made that violates superko or things like that.
     //In the encore, we also need to ignore the simple ko loc, since the board itself will report a move as illegal
     //when actually it is a legal pass-for-ko.
-    if(rootHistory.encorePhase >= 1)
-      return rootBoard.isLegalIgnoringKo(moveLoc,rootPla,multiStoneSuicideLegal);
-    else
-      return rootBoard.isLegal(moveLoc,rootPla,multiStoneSuicideLegal);
+    if(!rootBoard.isLegalIgnoringKo(moveLoc,rootPla,multiStoneSuicideLegal))
+      return false;
+    if(rootHistory.encorePhase <= 0 && rootBoard.isKoBanned(moveLoc))
+      return false;
+    return true;
   }
 }
 
@@ -350,6 +361,8 @@ bool Search::makeMove(Loc moveLoc, Player movePla, bool preventEncore) {
   rootHistory.makeBoardMoveAssumeLegal(rootBoard,moveLoc,rootPla,rootKoHashTable,preventEncore);
   rootPla = getOpp(rootPla);
   rootKoHashTable->recompute(rootHistory);
+  avoidMoveUntilByLocBlack.clear();
+  avoidMoveUntilByLocWhite.clear();
 
   if(rootHistory.whiteHandicapBonusScore != oldWhiteHandicapBonusScore)
     clearSearch();
@@ -611,10 +624,6 @@ void Search::beginSearch(bool pondering) {
   computeRootValues();
   maybeRecomputeNormToTApproxTable();
 
-  //Sanity-check a few things
-  if(!rootPassLegal && searchParams.rootPruneUselessMoves)
-    throw StringError("Both rootPassLegal=false and searchParams.rootPruneUselessMoves=true are specified, this could leave the bot without legal moves!");
-
   SearchThread dummyThread(-1, *this, NULL);
 
   if(rootNode == NULL) {
@@ -802,6 +811,74 @@ void Search::computeRootValues() {
     if(recentScoreCenter < expectedScore - cap)
       recentScoreCenter = expectedScore - cap;
   }
+
+  Player opponentWasMirroringPla = mirroringPla;
+  mirroringPla = C_EMPTY;
+  mirrorAdvantage = 0.0;
+  mirrorCenterIsSymmetric = false;
+  if(searchParams.antiMirror) {
+    const Board& board = rootBoard;
+    const BoardHistory& hist = rootHistory;
+    int mirrorCount = 0;
+    int totalCount = 0;
+    double mirrorEwms = 0;
+    double totalEwms = 0;
+    bool lastWasMirror = false;
+    for(int i = 1; i<hist.moveHistory.size(); i++) {
+      if(hist.moveHistory[i].pla != rootPla) {
+        lastWasMirror = false;
+        if(hist.moveHistory[i].loc == Location::getMirrorLoc(hist.moveHistory[i-1].loc,board.x_size,board.y_size)) {
+          mirrorCount += 1;
+          mirrorEwms += 1;
+          lastWasMirror = true;
+        }
+        totalCount += 1;
+        totalEwms += 1;
+        mirrorEwms *= 0.75;
+        totalEwms *= 0.75;
+      }
+    }
+    //If at most of the moves in the game are mirror moves, and many of the recent moves were mirrors, and the last move
+    //was a mirror, then the opponent is mirroring.
+    if(mirrorCount >= 7.0 + 0.5 * totalCount && mirrorEwms >= 0.45 * totalEwms && lastWasMirror) {
+      mirroringPla = getOpp(rootPla);
+
+      double blackExtraPoints = 0.0;
+      int numHandicapStones = hist.computeNumHandicapStones();
+      if(hist.rules.scoringRule == Rules::SCORING_AREA) {
+        if(numHandicapStones > 0)
+          blackExtraPoints += numHandicapStones-1;
+        bool blackGetsLastMove = (board.x_size % 2 == 1 && board.y_size % 2 == 1) == (numHandicapStones == 0 || numHandicapStones % 2 == 1);
+        if(blackGetsLastMove)
+          blackExtraPoints += 1;
+      }
+      if(numHandicapStones > 0 && hist.rules.whiteHandicapBonusRule == Rules::WHB_N)
+        blackExtraPoints -= numHandicapStones;
+      if(numHandicapStones > 0 && hist.rules.whiteHandicapBonusRule == Rules::WHB_N_MINUS_ONE)
+        blackExtraPoints -= numHandicapStones-1;
+      mirrorAdvantage = mirroringPla == P_BLACK ? blackExtraPoints - hist.rules.komi : hist.rules.komi - blackExtraPoints;
+    }
+
+    if(board.x_size >= 7 && board.y_size >= 7) {
+      mirrorCenterIsSymmetric = true;
+      int halfX = board.x_size / 2;
+      int halfY = board.y_size / 2;
+      for(int dy = -3; dy <= 3; dy++) {
+        for(int dx = -3; dx <= 3; dx++) {
+          Loc loc = Location::getLoc(halfX+dx,halfY+dy,board.x_size);
+          Loc mirrorLoc = Location::getMirrorLoc(loc,board.x_size,board.y_size);
+          if(loc == mirrorLoc)
+            continue;
+          Color c = board.colors[mirrorLoc] != C_EMPTY ? getOpp(board.colors[mirrorLoc]) : C_EMPTY;
+          if(board.colors[loc] != c)
+            mirrorCenterIsSymmetric = false;
+        }
+      }
+    }
+  }
+  //Clear search if opponent mirror status changed, so that our tree adjusts appropriately
+  if(opponentWasMirroringPla != mirroringPla)
+    clearSearch();
 }
 
 int64_t Search::getRootVisits() const {
@@ -960,11 +1037,6 @@ void Search::maybeAddPolicyNoiseAndTempAlreadyLocked(SearchThread& thread, Searc
 bool Search::isAllowedRootMove(Loc moveLoc) const {
   assert(moveLoc == Board::PASS_LOC || rootBoard.isOnBoard(moveLoc));
 
-  //For use on some online go servers, we want to be able to support a cleanup mode, where we force
-  //the capture of stones that our training ruleset would consider simply dead by virtue of them
-  //being pass-dead, so we add an option to forbid passing at the root.
-  if(!rootPassLegal && moveLoc == Board::PASS_LOC)
-    return false;
   //A bad situation that can happen that unnecessarily prolongs training games is where one player
   //repeatedly passes and the other side repeatedly fills the opponent's space and/or suicides over and over.
   //To mitigate some of this and save computation, we make it so that at the root, if the last four moves by the opponent
@@ -1206,6 +1278,128 @@ static void maybeApplyWideRootNoise(
   }
 }
 
+static double square(double x) {
+  return x * x;
+}
+
+static void maybeApplyAntiMirrorPolicy(
+  float& nnPolicyProb,
+  Loc moveLoc,
+  const float* policyProbs,
+  Player movePla,
+  const SearchThread* thread,
+  const Search* search
+) {
+  int xSize = thread->board.x_size;
+  int ySize = thread->board.y_size;
+  //Put significant prior probability on the opponent continuing to mirror, at least for the next few turns.
+  if(movePla == getOpp(search->rootPla) && thread->history.moveHistory.size() > 0) {
+    Loc prevLoc = thread->history.moveHistory[thread->history.moveHistory.size()-1].loc;
+    if(prevLoc == Board::PASS_LOC)
+      return;
+    Loc mirrorLoc = Location::getMirrorLoc(prevLoc,xSize,ySize);
+    if(policyProbs[search->getPos(mirrorLoc)] < 0)
+      mirrorLoc = Board::PASS_LOC;
+    if(moveLoc == mirrorLoc) {
+      float weight = (float)(0.5 / (1.0 + sqrt(thread->history.moveHistory.size() - search->rootHistory.moveHistory.size())));
+      nnPolicyProb = nnPolicyProb + (1.0f - nnPolicyProb) * weight;
+    }
+  }
+  //Put a small prior on playing the center or attaching to center, bonusing moves that are relatively more likely.
+  else if(movePla == search->rootPla && moveLoc != Board::PASS_LOC) {
+    if(Location::isCentral(moveLoc,xSize,ySize)) {
+      float weight = (float)(1.0/square(1.0-log10(nnPolicyProb+1e-30)));
+      nnPolicyProb = nnPolicyProb + (1.0f - nnPolicyProb) * weight;
+    }
+    else {
+      Loc centerLoc = Location::getCenterLoc(xSize,ySize);
+      if(centerLoc != Board::NULL_LOC) {
+        if(search->rootBoard.colors[centerLoc] == getOpp(movePla)) {
+          if(thread->board.isAdjacentToChain(moveLoc,centerLoc) || Location::euclideanDistanceSquared(moveLoc,centerLoc,xSize) <= 2) {
+            float weight = (float)(1.0/square(1.0-log10(nnPolicyProb+1e-30)));
+            nnPolicyProb = nnPolicyProb + (1.0f - nnPolicyProb) * weight;
+          }
+        }
+      }
+    }
+  }
+}
+
+//Force the search to dump playouts down a mirror move, so as to encourage moves that cause mirror moves
+//to have bad values, and also tolerate us playing certain countering moves even if their values are a bit worse.
+static void maybeApplyAntiMirrorForcedExplore(
+  double& childUtility,
+  Loc moveLoc,
+  const float* policyProbs,
+  int64_t thisChildVisits,
+  int64_t totalChildVisits,
+  Player movePla,
+  SearchThread* thread,
+  const Search* search,
+  const SearchNode& parent
+) {
+  Player mirroringPla = search->mirroringPla;
+  assert(mirroringPla == getOpp(search->rootPla));
+
+  int xSize = thread->board.x_size;
+  int ySize = thread->board.y_size;
+  Loc centerLoc = Location::getCenterLoc(xSize,ySize);
+  //The difficult case is when the opponent has occupied tengen, and ALSO the komi favors them.
+  //In such a case, we're going to have a hard time.
+  //Technically there are other configurations (like if the opponent makes a diamond around tengen)
+  //but we're not going to worry about breaking that.
+  bool isDifficult = centerLoc != Board::NULL_LOC && thread->board.colors[centerLoc] == search->mirroringPla && search->mirrorAdvantage >= 0.0;
+  bool isSemiDifficult = !isDifficult && search->mirrorAdvantage >= 6.5;
+
+  //Force mirroring pla to dump playouts down mirror moves
+  if(movePla == mirroringPla && thread->history.moveHistory.size() > 0) {
+    Loc prevLoc = thread->history.moveHistory[thread->history.moveHistory.size()-1].loc;
+    if(prevLoc == Board::PASS_LOC)
+      return;
+    Loc mirrorLoc = Location::getMirrorLoc(prevLoc,xSize,ySize);
+    if(policyProbs[search->getPos(mirrorLoc)] < 0)
+      mirrorLoc = Board::PASS_LOC;
+    if(moveLoc == mirrorLoc) {
+      //Check that the player has also been mirroring since the start of search
+      for(size_t i = search->rootHistory.moveHistory.size()+1; i < thread->history.moveHistory.size(); i += 2) {
+        if(thread->history.moveHistory[i].loc != Location::getMirrorLoc(thread->history.moveHistory[i-1].loc,xSize,ySize))
+          return;
+      }
+
+      double bonus = 0.02;
+      if(isDifficult) {
+        if(mirrorLoc != Board::PASS_LOC && search->mirrorCenterIsSymmetric) {
+          double factor = 0.75 + 0.5 * sqrt(Location::euclideanDistanceSquared(centerLoc,mirrorLoc,xSize));
+          if(thisChildVisits * factor < totalChildVisits && mirrorLoc != Board::PASS_LOC) {
+            bonus = 1.0;
+          }
+        }
+        if(thisChildVisits * 5 < totalChildVisits)
+          bonus = 1.0;
+      }
+      else if(isSemiDifficult && search->mirrorAdvantage >= 8.5) {
+        if(thisChildVisits * 5 < totalChildVisits)
+          bonus = 1.0;
+      }
+      else if(isSemiDifficult) {
+        if(thisChildVisits * 8 < totalChildVisits)
+          bonus = 1.0;
+      }
+      else {
+        if(thisChildVisits * 20 < totalChildVisits)
+          bonus = 0.2;
+      }
+      bonus *= (float)(2.0 / (1.0 + sqrt(thread->history.moveHistory.size() - search->rootHistory.moveHistory.size())));
+      childUtility += (parent.nextPla == P_WHITE ? bonus : -bonus);
+    }
+  }
+  //Encourage us to find refuting moves, even if they look a little bad, in the difficult case
+  else if(movePla == search->rootPla && moveLoc != Board::PASS_LOC) {
+    if(isDifficult && thread->board.isAdjacentToChain(moveLoc,centerLoc))
+      childUtility += (parent.nextPla == P_WHITE ? 0.10 : -0.10);
+  }
+}
+
 
 //Parent must be locked
 double Search::getExploreSelectionValue(
@@ -1279,6 +1473,10 @@ double Search::getExploreSelectionValue(
       maybeApplyWideRootNoise(childUtility, nnPolicyProb, searchParams, thread, parent);
     }
   }
+  if(isDuringSearch && searchParams.antiMirror && mirroringPla != C_EMPTY) {
+    maybeApplyAntiMirrorPolicy(nnPolicyProb, moveLoc, parentPolicyProbs, parent.nextPla, thread, this);
+    maybeApplyAntiMirrorForcedExplore(childUtility, moveLoc, parentPolicyProbs, childVisits, totalChildVisits, parent.nextPla, thread, this, parent);
+  }
 
   return getExploreSelectionValue(nnPolicyProb,totalChildVisits,childVisits,childUtility,parent.nextPla);
 }
@@ -1286,7 +1484,6 @@ double Search::getExploreSelectionValue(
 double Search::getNewExploreSelectionValue(const SearchNode& parent, float nnPolicyProb, int64_t totalChildVisits, double fpuValue, SearchThread* thread) const {
   int64_t childVisits = 0;
   double childUtility = fpuValue;
-
   if((&parent == rootNode) && searchParams.wideRootNoise > 0.0) {
     maybeApplyWideRootNoise(childUtility, nnPolicyProb, searchParams, thread, parent);
   }
@@ -1416,6 +1613,8 @@ void Search::selectBestChildToDescend(
     posesWithChildBuf[getPos(moveLoc)] = true;
   }
 
+  const std::vector<int>& avoidMoveUntilByLoc = thread.pla == P_BLACK ? avoidMoveUntilByLocBlack : avoidMoveUntilByLocWhite;
+
   //Try the new child with the best policy value
   Loc bestNewMoveLoc = Board::NULL_LOC;
   float bestNewNNPolicyProb = -1.0f;
@@ -1435,8 +1634,17 @@ void Search::selectBestChildToDescend(
       if(!isAllowedRootMove(moveLoc))
         continue;
     }
+    if(avoidMoveUntilByLoc.size() > 0) {
+      assert(avoidMoveUntilByLoc.size() >= Board::MAX_ARR_SIZE);
+      int untilDepth = avoidMoveUntilByLoc[moveLoc];
+      if(thread.history.moveHistory.size() - rootHistory.moveHistory.size() < untilDepth)
+        continue;
+    }
 
     float nnPolicyProb = policyProbs[movePos];
+    if(searchParams.antiMirror && mirroringPla != C_EMPTY) {
+      maybeApplyAntiMirrorPolicy(nnPolicyProb, moveLoc, policyProbs, node.nextPla, &thread, this);
+    }
 
     if(nnPolicyProb > bestNewNNPolicyProb) {
       bestNewNNPolicyProb = nnPolicyProb;
@@ -1524,7 +1732,7 @@ void Search::recomputeNodeStats(SearchNode& node, SearchThread& thread, int numV
   }
   lock.unlock();
 
-  if(searchParams.valueWeightExponent > 0)
+  if(searchParams.valueWeightExponent > 0 && mirroringPla == C_EMPTY)
     getValueChildWeights(numGoodChildren,selfUtilities,visits,weightFactors);
 
   //In the case we're enabling noise at the root node, also apply the slight subtraction
@@ -1558,7 +1766,7 @@ void Search::recomputeNodeStats(SearchNode& node, SearchThread& thread, int numV
     if(desiredWeight < 0.0)
       continue;
 
-    if(searchParams.valueWeightExponent > 0)
+    if(searchParams.valueWeightExponent > 0 && mirroringPla == C_EMPTY)
       desiredWeight *= pow(weightFactors[i], searchParams.valueWeightExponent);
 
     double weightScaling = desiredWeight / weightSums[i];
@@ -1730,13 +1938,16 @@ void Search::initNodeNNOutput(
   if(isReInit)
     return;
 
+  addCurentNNOutputAsLeafValue(node,virtualLossesToSubtract);
+}
+
+void Search::addCurentNNOutputAsLeafValue(SearchNode& node, int32_t virtualLossesToSubtract) {
   //Values in the search are from the perspective of white positive always
   double winProb = (double)node.nnOutput->whiteWinProb;
   double noResultProb = (double)node.nnOutput->whiteNoResultProb;
   double scoreMean = (double)node.nnOutput->whiteScoreMean;
   double scoreMeanSq = (double)node.nnOutput->whiteScoreMeanSq;
   double lead = (double)node.nnOutput->whiteLead;
-
   addLeafValue(node,winProb,noResultProb,scoreMean,scoreMeanSq,lead,virtualLossesToSubtract);
 }
 
@@ -1798,7 +2009,7 @@ void Search::playoutDescend(
   //The absurdly rare case that the move chosen is not legal
   //(this should only happen either on a bug or where the nnHash doesn't have full legality information or when there's an actual hash collision).
   //Regenerate the neural net call and continue
-  if(!thread.history.isLegal(thread.board,bestChildMoveLoc,thread.pla)) {
+  if(bestChildIdx >= 0 && !thread.history.isLegal(thread.board,bestChildMoveLoc,thread.pla)) {
     bool isReInit = true;
     initNodeNNOutput(thread,node,isRoot,true,0,isReInit);
 
@@ -1807,13 +2018,18 @@ void Search::playoutDescend(
 
     //As isReInit is true, we don't return, just keep going, since we didn't count this as a true visit in the node stats
     selectBestChildToDescend(thread,node,bestChildIdx,bestChildMoveLoc,posesWithChildBuf,isRoot);
-    //We should absolutely be legal this time
-    assert(thread.history.isLegal(thread.board,bestChildMoveLoc,thread.pla));
+    if(bestChildIdx >= 0) {
+      //We should absolutely be legal this time
+      assert(thread.history.isLegal(thread.board,bestChildMoveLoc,thread.pla));
+    }
   }
 
-  if(bestChildIdx < -1) {
+  if(bestChildIdx <= -1) {
+    //This might happen if all moves have been forbidden. The node will just get stuck at 1 visit forever then
+    //and we won't do any search.
     lock.unlock();
-    throw StringError("Search error: No move with sane selection value - can't even pass?");
+    addCurentNNOutputAsLeafValue(node,virtualLossesToSubtract);
+    return;
   }
 
   //Reallocate the children array to increase capacity if necessary

@@ -5,7 +5,9 @@
 
 using namespace std;
 
-const char* OpenCLHelpers::getErrorMessage(cl_int error)
+using half_t = half_float::half;
+
+const string OpenCLHelpers::getErrorMessage(cl_int error)
 {
   switch(error){
   case 0: return "CL_SUCCESS";
@@ -75,7 +77,7 @@ const char* OpenCLHelpers::getErrorMessage(cl_int error)
   case -1003: return "CL_INVALID_D3D10_RESOURCE_KHR";
   case -1004: return "CL_D3D10_RESOURCE_ALREADY_ACQUIRED_KHR";
   case -1005: return "CL_D3D10_RESOURCE_NOT_ACQUIRED_KHR";
-  default: return "Unknown OpenCL error";
+  default: return "Unknown OpenCL error " + Global::intToString(error);
   }
 }
 
@@ -98,7 +100,7 @@ cl_program OpenCLHelpers::compileProgram(const string& name, cl_context context,
 
   const string opts = options + " -cl-mad-enable -cl-fast-relaxed-math -cl-no-signed-zeros -cl-denorms-are-zero";
 
-  err = clBuildProgram(program, 0, NULL, opts.c_str(), NULL, NULL);
+  err = clBuildProgram(program, devices.size(), devices.data(), opts.c_str(), NULL, NULL);
   if(err != 0) {
     string s;
     s += OpenCLHelpers::getErrorMessage(err) + string("\n");
@@ -117,18 +119,38 @@ cl_program OpenCLHelpers::compileProgram(const string& name, cl_context context,
   return program;
 }
 
-bool OpenCLHelpers::tryCompileProgram(const string& name, cl_context context, const vector<cl_device_id>& devices, const string& str, const string& options, cl_program& buf) {
+bool OpenCLHelpers::tryCompileProgram(
+  const string& name,
+  cl_context context,
+  const vector<cl_device_id>& devices,
+  const string& str,
+  const string& options,
+  cl_program& buf,
+  string& errorMessage
+) {
   try {
     buf = compileProgram(name,context,devices,str,options);
   }
   catch(CompileError& e) {
-    (void)e;
+    errorMessage = e.what();
     return false;
   }
   return true;
 }
 
 cl_mem OpenCLHelpers::createReadOnlyBuffer(cl_context clContext, vector<float>& data) {
+  cl_int err;
+  cl_mem buf = clCreateBuffer(
+    clContext,
+    CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR,
+    byteSizeofVectorContents(data),
+    data.data(),
+    &err
+  );
+  CHECK_ERR(err);
+  return buf;
+}
+cl_mem OpenCLHelpers::createReadOnlyBuffer(cl_context clContext, vector<half_t>& data) {
   cl_int err;
   cl_mem buf = clCreateBuffer(
     clContext,
@@ -153,17 +175,45 @@ cl_mem OpenCLHelpers::createReadWriteBuffer(cl_context clContext, vector<float>&
   CHECK_ERR(err);
   return buf;
 }
+cl_mem OpenCLHelpers::createReadWriteBuffer(cl_context clContext, vector<half_t>& data) {
+  cl_int err;
+  cl_mem buf = clCreateBuffer(
+    clContext,
+    CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+    byteSizeofVectorContents(data),
+    data.data(),
+    &err
+  );
+  CHECK_ERR(err);
+  return buf;
+}
 
-cl_mem OpenCLHelpers::createReadWriteBuffer(cl_context clContext, size_t numFloats) {
+cl_mem OpenCLHelpers::createReadWriteBufferFloat(cl_context clContext, size_t numElts) {
   //Minimum allocation size, just in case, to avoid allocations of size 0
-  if(numFloats < 32)
-    numFloats = 32;
+  if(numElts < 32)
+    numElts = 32;
 
   cl_int err;
   cl_mem buf = clCreateBuffer(
     clContext,
     CL_MEM_READ_WRITE,
-    numFloats * sizeof(float),
+    numElts * sizeof(float),
+    NULL,
+    &err
+  );
+  CHECK_ERR(err);
+  return buf;
+}
+cl_mem OpenCLHelpers::createReadWriteBufferHalf(cl_context clContext, size_t numElts) {
+  //Minimum allocation size, just in case, to avoid allocations of size 0
+  if(numElts < 32)
+    numElts = 32;
+
+  cl_int err;
+  cl_mem buf = clCreateBuffer(
+    clContext,
+    CL_MEM_READ_WRITE,
+    numElts * sizeof(half_t),
     NULL,
     &err
   );
@@ -172,18 +222,43 @@ cl_mem OpenCLHelpers::createReadWriteBuffer(cl_context clContext, size_t numFloa
 }
 
 
-void OpenCLHelpers::blockingReadBuffer(cl_command_queue commandQueue, cl_mem srcBuf, size_t numFloats, std::vector<float>& dstBuf) {
-  dstBuf.resize(numFloats);
+void OpenCLHelpers::blockingReadBuffer(cl_command_queue commandQueue, cl_mem srcBuf, size_t numElts, std::vector<float>& dstBuf) {
+  dstBuf.resize(numElts);
   cl_bool blocking = CL_TRUE;
   cl_int err;
   err = clEnqueueReadBuffer(commandQueue, srcBuf, blocking, 0, byteSizeofVectorContents(dstBuf), dstBuf.data(), 0, NULL, NULL);
   CHECK_ERR(err);
 }
+void OpenCLHelpers::blockingReadBuffer(cl_command_queue commandQueue, cl_mem srcBuf, size_t numElts, std::vector<half_t>& dstBuf) {
+  dstBuf.resize(numElts);
+  cl_bool blocking = CL_TRUE;
+  cl_int err;
+  err = clEnqueueReadBuffer(commandQueue, srcBuf, blocking, 0, byteSizeofVectorContents(dstBuf), dstBuf.data(), 0, NULL, NULL);
+  CHECK_ERR(err);
+}
+void OpenCLHelpers::blockingReadBufferHalfToFloat(cl_command_queue commandQueue, cl_mem srcBuf, size_t numElts, std::vector<float>& dstBuf) {
+  vector<half_t> tmpHalf;
+  blockingReadBuffer(commandQueue, srcBuf, numElts, tmpHalf);
+   dstBuf.resize(numElts);
+  for(size_t i = 0; i<numElts; i++)
+    dstBuf[i] = tmpHalf[i];
+}
+void OpenCLHelpers::blockingReadBuffer(cl_command_queue commandQueue, cl_mem srcBuf, size_t numElts, std::vector<float>& dstBuf, bool useFP16) {
+  if(useFP16)
+    blockingReadBufferHalfToFloat(commandQueue, srcBuf, numElts, dstBuf);
+  else
+    blockingReadBuffer(commandQueue, srcBuf, numElts, dstBuf);
+}
 
 vector<DeviceInfo> DeviceInfo::getAllDeviceInfosOnSystem(Logger* logger) {
+  //Some opencl headers/implementations are buggy and have more platforms or more devices than they
+  //say their maximum is, so just add a buffer.
+  static constexpr size_t maxPlatforms = MAX_PLATFORMS + 128;
+  static constexpr size_t maxDevices = MAX_DEVICES + 1024;
+
   cl_int err;
   cl_uint numPlatforms;
-  vector<cl_platform_id> platformIds(MAX_PLATFORMS);
+  vector<cl_platform_id> platformIds(maxPlatforms);
   err = clGetPlatformIDs(platformIds.size(), platformIds.data(), &numPlatforms);
   CHECK_ERR(err);
   assert(numPlatforms <= platformIds.size());
@@ -195,31 +270,35 @@ vector<DeviceInfo> DeviceInfo::getAllDeviceInfosOnSystem(Logger* logger) {
     buf[i] = '\0';
 
   int numDevicesTotal = 0;
-  vector<cl_device_id> deviceIds(MAX_DEVICES);
+  vector<cl_device_id> deviceIds(maxDevices);
+  vector<cl_platform_id> platformIdsForDevices;
+  vector<string> platformDescsForDevices;
   for(int platformIdx = 0; platformIdx < numPlatforms && numDevicesTotal < deviceIds.size(); platformIdx++) {
     size_t sizeRet;
+    cl_platform_id platformId = platformIds[platformIdx];
 
-    err = clGetPlatformInfo(platformIds[platformIdx], CL_PLATFORM_NAME, bufLen, buf.data(), &sizeRet);
+    err = clGetPlatformInfo(platformId, CL_PLATFORM_NAME, bufLen, buf.data(), &sizeRet);
     assert(sizeRet < bufLen-1);
     CHECK_ERR(err);
     string name = string(buf.data());
 
-    err = clGetPlatformInfo(platformIds[platformIdx], CL_PLATFORM_VENDOR, bufLen, buf.data(), &sizeRet);
+    err = clGetPlatformInfo(platformId, CL_PLATFORM_VENDOR, bufLen, buf.data(), &sizeRet);
     assert(sizeRet < bufLen-1);
     CHECK_ERR(err);
     string vendor = string(buf.data());
 
-    err = clGetPlatformInfo(platformIds[platformIdx], CL_PLATFORM_VERSION, bufLen, buf.data(), &sizeRet);
+    err = clGetPlatformInfo(platformId, CL_PLATFORM_VERSION, bufLen, buf.data(), &sizeRet);
     assert(sizeRet < bufLen-1);
     CHECK_ERR(err);
     string version = string(buf.data());
 
+    string desc =  name + " (" + vendor + ") (" + version + ")";
     if(logger != NULL)
-      logger->write("Found OpenCL Platform " + Global::intToString(platformIdx) + ": " + name + " (" + vendor + ") (" + version + ")");
+      logger->write("Found OpenCL Platform " + Global::intToString(platformIdx) + ": " + desc);
 
     cl_uint numDevices;
     err = clGetDeviceIDs(
-      platformIds[platformIdx], CL_DEVICE_TYPE_CPU | CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_ACCELERATOR, deviceIds.size() - numDevicesTotal,
+      platformId, CL_DEVICE_TYPE_CPU | CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_ACCELERATOR, deviceIds.size() - numDevicesTotal,
       deviceIds.data() + numDevicesTotal, &numDevices);
     //Allow there to be 0 devices on this platform, just move on to the next
     if(err == CL_DEVICE_NOT_FOUND) {
@@ -228,9 +307,14 @@ vector<DeviceInfo> DeviceInfo::getAllDeviceInfosOnSystem(Logger* logger) {
       continue;
     }
 
+    for(size_t i = 0; i < numDevices; i++) {
+      platformIdsForDevices.push_back(platformId);
+      platformDescsForDevices.push_back(desc);
+    }
+
     CHECK_ERR(err);
-    assert(numDevices <= deviceIds.size());
     numDevicesTotal += numDevices;
+    assert(numDevicesTotal <= deviceIds.size());
     if(logger != NULL)
       logger->write("Found " + Global::intToString(numDevices) + " device(s) on platform " + Global::intToString(platformIdx) + " with type CPU or GPU or Accelerator");
   }
@@ -299,17 +383,24 @@ vector<DeviceInfo> DeviceInfo::getAllDeviceInfosOnSystem(Logger* logger) {
     }
 
     if(logger != NULL)
-      logger->write("Found OpenCL Device " + Global::intToString(gpuIdx) + ": " + name + " (" + vendor + ")" + " (score " + Global::intToString(defaultDesirability) + ")");
+      logger->write(
+        "Found OpenCL Device " + Global::intToString(gpuIdx) +
+        ": " + name + " (" + vendor + ")" + " (score " +
+        Global::intToString(defaultDesirability) + ")"
+      );
 
     DeviceInfo info;
     info.gpuIdx = gpuIdx;
     info.deviceId = deviceIds[gpuIdx];
+    info.platformId = platformIdsForDevices[gpuIdx];
+    info.platformDesc = platformDescsForDevices[gpuIdx];
     info.name = name;
     info.vendor = vendor;
     info.deviceType = deviceType;
     info.openCLVersion = openCLVersion;
     info.extensions = extensions;
     info.defaultDesirability = defaultDesirability;
+    info.supportsFP16Compute = (extensions.find("cl_khr_fp16") != string::npos);
     allDeviceInfos.push_back(info);
   }
 
@@ -320,7 +411,8 @@ vector<DeviceInfo> DeviceInfo::getAllDeviceInfosOnSystem(Logger* logger) {
 
 
 DevicesContext::DevicesContext(const vector<DeviceInfo>& allDeviceInfos, const vector<int>& gIdxsToUse, Logger* logger, bool enableProfiling)
-  : devicesToUse(),
+  : initializedPlatforms(),
+    devicesToUse(),
     uniqueDeviceNamesToUse()
 {
   defaultGpuIdx = 0;
@@ -352,38 +444,89 @@ DevicesContext::DevicesContext(const vector<DeviceInfo>& allDeviceInfos, const v
   vector<cl_device_id> deviceIdsToUse;
   for(size_t i = 0; i<gpuIdxsToUse.size(); i++) {
     int gpuIdx = gpuIdxsToUse[i];
-    if(gpuIdx < 0 || gpuIdx >= allDeviceInfos.size())
+    if(gpuIdx < 0 || gpuIdx >= allDeviceInfos.size()) {
+      if(allDeviceInfos.size() <= 0) {
+        throw StringError(
+          "No OpenCL devices were found on your system. If you believe you do have a GPU or other device with OpenCL installed, then your OpenCL installation or drivers may be buggy or broken or otherwise failing to detect your device."
+        );
+      }
       throw StringError(
         "Requested gpuIdx/device " + Global::intToString(gpuIdx) +
         " was not found, valid devices range from 0 to " + Global::intToString((int)allDeviceInfos.size() - 1)
       );
+    }
     deviceIdsToUse.push_back(allDeviceInfos[gpuIdx].deviceId);
   }
 
-  cl_int err;
-  cl_context_properties* properties = NULL;
-  cl_uint numDevicesToUse = (cl_uint)deviceIdsToUse.size();
-  context = clCreateContext(properties, numDevicesToUse, deviceIdsToUse.data(), NULL, NULL, &err);
-  CHECK_ERR(err);
+  //Collect all platforms from all the devices we are actually using, with multiplicity
+  //In theory, we should only be making one of these per opencl platform.
+  //In practice, doing this for NVIDIA introduces a false dependency where only one GPU will get
+  //used at a time, each one locking out the others when used. Separate contexts for the same
+  //platform is a workaround.
+  for(size_t i = 0; i<gpuIdxsToUse.size(); i++) {
+    int gpuIdx = gpuIdxsToUse[i];
+    const DeviceInfo& deviceInfo = allDeviceInfos[gpuIdx];
+    cl_device_id deviceId = deviceInfo.deviceId;
+    cl_platform_id platformId = deviceInfo.platformId;
+    InitializedPlatform* initializedPlatform = new InitializedPlatform();
+    initializedPlatform->platformId = platformId;
+    initializedPlatform->platformDesc = deviceInfo.platformDesc;
+    initializedPlatform->deviceIdsToUseForThisPlatform.push_back(deviceId);
+    initializedPlatforms.push_back(initializedPlatform);
+  }
+
+  for(auto iter = initializedPlatforms.begin(); iter != initializedPlatforms.end(); ++iter) {
+    InitializedPlatform* initializedPlatform = *iter;
+    cl_platform_id platformId = initializedPlatform->platformId;
+    initializedPlatform->properties.push_back(CL_CONTEXT_PLATFORM);
+    initializedPlatform->properties.push_back((cl_context_properties)platformId);
+    initializedPlatform->properties.push_back(0);
+
+    string message =
+      "Creating context for OpenCL Platform: " + initializedPlatform->platformDesc;
+    if(logger != NULL) {
+      logger->write(message);
+      if(!logger->isLoggingToStdout() && !logger->isLoggingToStderr())
+        cerr << message << endl;
+    }
+
+    cl_int err;
+    initializedPlatform->context = clCreateContext(
+      initializedPlatform->properties.data(),
+      initializedPlatform->deviceIdsToUseForThisPlatform.size(),
+      initializedPlatform->deviceIdsToUseForThisPlatform.data(),
+      NULL,
+      NULL,
+      &err
+    );
+    CHECK_ERR(err);
+  }
 
   for(size_t i = 0; i<gpuIdxsToUse.size(); i++) {
+    int gpuIdx = gpuIdxsToUse[i];
+    const DeviceInfo& deviceInfo = allDeviceInfos[gpuIdx];
+    cl_device_id deviceId = deviceInfo.deviceId;
+    cl_context context = initializedPlatforms[i]->context;
+
     //TODO - someday, maybe consider CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE
+    cl_int err;
     cl_command_queue commandQueue;
     if(enableProfiling)
-      commandQueue = clCreateCommandQueue(context, deviceIdsToUse[i], CL_QUEUE_PROFILING_ENABLE, &err);
+      commandQueue = clCreateCommandQueue(context, deviceId, CL_QUEUE_PROFILING_ENABLE, &err);
     else
-      commandQueue = clCreateCommandQueue(context, deviceIdsToUse[i], 0, &err);
+      commandQueue = clCreateCommandQueue(context, deviceId, 0, &err);
 
     CHECK_ERR(err);
-    InitializedDevice device;
-    device.info = allDeviceInfos[gpuIdxsToUse[i]];
-    device.commandQueue = commandQueue;
+    InitializedDevice* device = new InitializedDevice();
+    device->info = deviceInfo;
+    device->context = context;
+    device->commandQueue = commandQueue;
     devicesToUse.push_back(device);
 
     string message =
-      "Using OpenCL Device " + Global::intToString(gpuIdxsToUse[i]) + ": " + device.info.name +
-      " (" + device.info.vendor + ") " +
-      device.info.openCLVersion;
+      "Using OpenCL Device " + Global::intToString(gpuIdxsToUse[i]) + ": " + device->info.name +
+      " (" + device->info.vendor + ") " +
+      device->info.openCLVersion + " (Extensions: " + device->info.extensions + ")";
     if(logger != NULL) {
       logger->write(message);
       if(!logger->isLoggingToStdout() && !logger->isLoggingToStderr())
@@ -392,44 +535,52 @@ DevicesContext::DevicesContext(const vector<DeviceInfo>& allDeviceInfos, const v
   }
 
   for(size_t i = 0; i<gpuIdxsToUse.size(); i++) {
-    if(contains(uniqueDeviceNamesToUse, devicesToUse[i].info.name))
+    if(contains(uniqueDeviceNamesToUse, devicesToUse[i]->info.name))
       continue;
-    uniqueDeviceNamesToUse.push_back(devicesToUse[i].info.name);
+    uniqueDeviceNamesToUse.push_back(devicesToUse[i]->info.name);
   }
 }
 
 DevicesContext::~DevicesContext() {
   for(int i = 0; i<devicesToUse.size(); i++) {
-    clFlush(devicesToUse[i].commandQueue);
-    clFinish(devicesToUse[i].commandQueue);
-    clReleaseCommandQueue(devicesToUse[i].commandQueue);
+    InitializedDevice* device = devicesToUse[i];
+    clFlush(device->commandQueue);
+    clFinish(device->commandQueue);
+    clReleaseCommandQueue(device->commandQueue);
+    delete device;
   }
-  clReleaseContext(context);
+
+  for(auto iter = initializedPlatforms.begin(); iter != initializedPlatforms.end(); ++iter) {
+    InitializedPlatform* initializedPlatform = *iter;
+    clReleaseContext(initializedPlatform->context);
+    delete initializedPlatform;
+  }
 }
 
-const InitializedDevice& DevicesContext::findGpuExn(int gpuIdx) const {
+const InitializedDevice* DevicesContext::findGpuExn(int gpuIdx) const {
   if(gpuIdx == -1)
     gpuIdx = defaultGpuIdx;
   for(int i = 0; i<devicesToUse.size(); i++) {
-    if(devicesToUse[i].info.gpuIdx == gpuIdx)
+    if(devicesToUse[i]->info.gpuIdx == gpuIdx)
       return devicesToUse[i];
   }
   throw StringError("BUG? Attempted to create ComputeHandle for a gpuIdx that was not part of the DevicesContext: " + Global::intToString(gpuIdx));
 }
 
-vector<InitializedDevice> DevicesContext::findDevicesToUseWithName(const string& name) const {
-  vector<InitializedDevice> devices;
+vector<const InitializedDevice*> DevicesContext::findDevicesToUseWithName(const string& name) const {
+  vector<const InitializedDevice*> devices;
   for(int i = 0; i<devicesToUse.size(); i++) {
-    if(devicesToUse[i].info.name == name)
+    if(devicesToUse[i]->info.name == name) {
       devices.push_back(devicesToUse[i]);
+    }
   }
   return devices;
 }
 vector<cl_device_id> DevicesContext::findDeviceIdsToUseWithName(const string& name) const {
   vector<cl_device_id> deviceIds;
   for(int i = 0; i<devicesToUse.size(); i++) {
-    if(devicesToUse[i].info.name == name)
-      deviceIds.push_back(devicesToUse[i].info.deviceId);
+    if(devicesToUse[i]->info.name == name)
+      deviceIds.push_back(devicesToUse[i]->info.deviceId);
   }
   return deviceIds;
 }
@@ -463,7 +614,7 @@ size_t OpenCLHelpers::roundUpToMultiple(size_t size, size_t ofThis) {
 cl_int OpenCLHelpers::doBatchedXGemm_KM_KN_NM(
   cl_kernel kernel,
   cl_command_queue commandQueue,
-  const OpenCLTuneParams& tuneParams,
+  const OpenCLParams::XGemmParams& tuneParams,
   int M, int N, int K,
   cl_mem A, cl_mem B, cl_mem C,
   int numBatchElts,
@@ -482,18 +633,57 @@ cl_int OpenCLHelpers::doBatchedXGemm_KM_KN_NM(
   clSetKernelArg(kernel,10, sizeof(int), (void *)&M);
   clSetKernelArg(kernel,11, sizeof(int), (void *)&N);
 
-  assert(M % tuneParams.xGemm.MWG == 0);
-  assert(N % tuneParams.xGemm.NWG == 0);
-  assert(K % tuneParams.xGemm.KWG == 0);
+  assert(M % tuneParams.MWG == 0);
+  assert(N % tuneParams.NWG == 0);
+  assert(K % tuneParams.KWG == 0);
 
   static constexpr int nKernelDims = 3;
-  const size_t MDIMC = tuneParams.xGemm.MDIMC;
-  const size_t NDIMC = tuneParams.xGemm.NDIMC;
-  const size_t MWG = tuneParams.xGemm.MWG;
-  const size_t NWG = tuneParams.xGemm.NWG;
+  const size_t MDIMC = tuneParams.MDIMC;
+  const size_t NDIMC = tuneParams.NDIMC;
+  const size_t MWG = tuneParams.MWG;
+  const size_t NWG = tuneParams.NWG;
 
   size_t globalSizes[nKernelDims] = {M * MDIMC / MWG, N * NDIMC / NWG, (size_t)numBatchElts};
   size_t localSizes[nKernelDims] = {MDIMC, NDIMC, 1};
+
+  cl_int err;
+  err = clEnqueueNDRangeKernel(
+    commandQueue, kernel, nKernelDims, NULL, globalSizes, localSizes, 0, NULL, eventBuf
+  );
+  return err;
+}
+
+cl_int OpenCLHelpers::doBatchedHGemmWmma_KM_KN_NM(
+  cl_kernel kernel,
+  cl_command_queue commandQueue,
+  const OpenCLTuneParams& tuneParams,
+  int M, int N, int K,
+  cl_mem A, cl_mem B, cl_mem C,
+  int numBatchElts,
+  cl_event* eventBuf
+) {
+  clSetKernelArg(kernel, 0, sizeof(int), (void *)&M);
+  clSetKernelArg(kernel, 1, sizeof(int), (void *)&N);
+  clSetKernelArg(kernel, 2, sizeof(int), (void *)&K);
+  clSetKernelArg(kernel, 3, sizeof(cl_mem), (void *)&A);
+  clSetKernelArg(kernel, 4, sizeof(cl_mem), (void *)&B);
+  clSetKernelArg(kernel, 5, sizeof(cl_mem), (void *)&C);
+
+  assert(M % tuneParams.hGemmWmma.MWG == 0);
+  assert(N % tuneParams.hGemmWmma.NWG == 0);
+  assert(K % tuneParams.hGemmWmma.KWG == 0);
+
+  static constexpr int nKernelDims = 3;
+  const size_t MWAVE = tuneParams.hGemmWmma.MWAVE;
+  const size_t NWAVE = tuneParams.hGemmWmma.NWAVE;
+  const size_t MWARP = tuneParams.hGemmWmma.MWARP;
+  const size_t NWARP = tuneParams.hGemmWmma.NWARP;
+  const size_t MWG = tuneParams.hGemmWmma.MWG;
+  const size_t NWG = tuneParams.hGemmWmma.NWG;
+  const size_t WARP_SIZE = 32;
+
+  size_t globalSizes[nKernelDims] = {M * MWAVE / MWG / MWARP * WARP_SIZE, N * NWAVE / NWG / NWARP, (size_t)numBatchElts};
+  size_t localSizes[nKernelDims] = {MWAVE/MWARP * WARP_SIZE, NWAVE/NWARP, 1};
 
   cl_int err;
   err = clEnqueueNDRangeKernel(
@@ -869,42 +1059,5 @@ cl_int OpenCLHelpers::computeMaskSums(
   return err;
 }
 
-
-cl_int OpenCLHelpers::transposeNCHW(
-  cl_kernel kernel,
-  cl_command_queue commandQueue,
-  const OpenCLTuneParams& tuneParams,
-  int batchSize, int cSize, int nnXLen, int nnYLen,
-  cl_mem input, cl_mem output,
-  cl_event* eventBuf
-) {
-  static constexpr int nKernelDims = 3;
-  int TILEDIM = tuneParams.transpose.TILEDIM;
-  int TILESTRIDE = tuneParams.transpose.TILESTRIDE;
-  size_t localSizes[nKernelDims] = {
-    (size_t)TILEDIM,
-    (size_t)TILESTRIDE,
-    std::min((size_t)tuneParams.transpose.NCSTRIDE,powerOf2ify(batchSize*cSize))
-  };
-  size_t globalSizes[nKernelDims] = {
-    (size_t)(nnXLen+TILEDIM-1)/TILEDIM*localSizes[0],
-    (size_t)(nnYLen+TILEDIM-1)/TILEDIM*localSizes[1],
-    roundUpToMultiple(batchSize*cSize,localSizes[2])
-  };
-
-  int ncLen = batchSize*cSize;
-
-  clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&input);
-  clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&output);
-  clSetKernelArg(kernel, 2, sizeof(int), (void *)&nnXLen);
-  clSetKernelArg(kernel, 3, sizeof(int), (void *)&nnYLen);
-  clSetKernelArg(kernel, 4, sizeof(int), (void *)&ncLen);
-
-  cl_int err;
-  err = clEnqueueNDRangeKernel(
-    commandQueue, kernel, nKernelDims, NULL, globalSizes, localSizes, 0, NULL, eventBuf
-  );
-  return err;
-}
 
 #endif

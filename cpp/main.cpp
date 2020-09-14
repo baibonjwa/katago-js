@@ -169,11 +169,11 @@ int main(int argc, const char* argv[]) {
 }
 
 string Version::getKataGoVersion() {
-  return string("1.4.2");
+  return string("1.6.1");
 }
 
 string Version::getKataGoVersionForHelp() {
-  return string("KataGo v1.4.2");
+  return string("KataGo v1.6.1");
 }
 
 string Version::getKataGoVersionFullInfo() {
@@ -185,9 +185,16 @@ string Version::getKataGoVersionFullInfo() {
   out << "Using CUDA backend" << endl;
 #elif defined(USE_OPENCL_BACKEND)
   out << "Using OpenCL backend" << endl;
+#elif defined(USE_EIGEN_BACKEND)
+  out << "Using Eigen(CPU) backend" << endl;
 #else
   out << "Using dummy backend" << endl;
 #endif
+
+#if defined(USE_AVX2)
+  out << "Compiled with AVX2 and FMA instructions" << endl;
+#endif
+
   return out.str();
 }
 

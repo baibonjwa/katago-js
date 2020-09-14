@@ -267,7 +267,8 @@ void GameInitializer::initShared(ConfigParser& cfg, Logger& logger) {
     logger.write("Found " + Global::uint64ToString(files.size()) + " sgf files");
     logger.write("Loaded " + Global::uint64ToString(excludeHashes.size()) + " excludes");
     std::set<Hash128> uniqueHashes;
-    std::function<void(Sgf::PositionSample&)> posHandler = [startPosesLoadProb,this](Sgf::PositionSample& posSample) {
+    std::function<void(Sgf::PositionSample&, const BoardHistory&)> posHandler = [startPosesLoadProb,this](Sgf::PositionSample& posSample, const BoardHistory& hist) {
+      (void)hist;
       if(rand.nextBool(startPosesLoadProb))
         startPoses.push_back(posSample);
     };
@@ -424,6 +425,11 @@ bool GameInitializer::isAllowedBSize(int xSize, int ySize) {
   return true;
 }
 
+std::vector<int> GameInitializer::getAllowedBSizes() const {
+  return allowedBSizes;
+}
+
+
 Rules GameInitializer::createRules() {
   lock_guard<std::mutex> lock(createGameMutex);
   return createRulesUnsynchronized();
@@ -503,13 +509,18 @@ void GameInitializer::createGameSharedUnsynchronized(
     pla = startPos.nextPla;
     hist.clear(board,pla,rules,0);
     hist.setInitialTurnNumber(startPos.initialTurnNumber);
+    Loc hintLoc = startPos.hintLoc;
     for(size_t i = 0; i<startPos.moves.size(); i++) {
       bool isLegal = hist.isLegal(board,startPos.moves[i].loc,startPos.moves[i].pla);
-      if(!isLegal)
+      if(!isLegal) {
+        //If we stop due to illegality, it doesn't make sense to still use the hintLoc
+        hintLoc = Board::NULL_LOC;
         break;
+      }
       hist.makeBoardMoveAssumeLegal(board,startPos.moves[i].loc,startPos.moves[i].pla,NULL);
       pla = getOpp(startPos.moves[i].pla);
     }
+
     //No handicap when starting from a sampled position.
     double thisHandicapProb = 0.0;
     extraBlackAndKomi = chooseExtraBlackAndKomi(
@@ -517,11 +528,11 @@ void GameInitializer::createGameSharedUnsynchronized(
       thisHandicapProb, numExtraBlackFixed,
       komiBigStdevProb, komiBigStdev, sqrt(board.x_size*board.y_size), rand
     );
-    otherGameProps.isSgfPos = startPos.hintLoc == Board::NULL_LOC;
-    otherGameProps.isHintPos = startPos.hintLoc != Board::NULL_LOC;
-    otherGameProps.allowPolicyInit = startPos.hintLoc == Board::NULL_LOC; //On sgf positions, do allow extra moves at start
+    otherGameProps.isSgfPos = hintLoc == Board::NULL_LOC;
+    otherGameProps.isHintPos = hintLoc != Board::NULL_LOC;
+    otherGameProps.allowPolicyInit = hintLoc == Board::NULL_LOC; //On sgf positions, do allow extra moves at start
     otherGameProps.isFork = false;
-    otherGameProps.hintLoc = startPos.hintLoc;
+    otherGameProps.hintLoc = hintLoc;
     otherGameProps.hintTurn = hist.moveHistory.size();
     otherGameProps.hintPosHash = board.pos_hash;
     makeGameFairProb = sgfCompensateKomiProb;
@@ -722,6 +733,10 @@ pair<int,int> MatchPairer::getMatchupPairUnsynchronized() {
         }
       }
     }
+
+    if(nextMatchupsBuf.size() <= 0)
+      throw StringError("MatchPairer::getMatchupPairUnsynchronized: no matchups generated");
+    
     //Shuffle
     for(int i = nextMatchupsBuf.size()-1; i >= 1; i--) {
       int j = (int)rand.nextUInt(i+1);
@@ -1440,6 +1455,7 @@ FinishedGameData* Play::runGame(
       //Since we played out the game a bunch we should get a good mix of stones that were present or not present at the start
       //of the second encore phase if we're going into the second.
       int encorePhase = gameRand.nextInt(1,2);
+      board.clearSimpleKoLoc();
       hist.clear(board,pla,hist.rules,encorePhase);
 
       gameData->mode = FinishedGameData::MODE_CLEANUP_TRAINING;
@@ -2154,6 +2170,10 @@ GameRunner::GameRunner(ConfigParser& cfg, const string& gameInitRandSeed, PlaySe
 
 GameRunner::~GameRunner() {
   delete gameInit;
+}
+
+const GameInitializer* GameRunner::getGameInitializer() const {
+  return gameInit;
 }
 
 FinishedGameData* GameRunner::runGame(

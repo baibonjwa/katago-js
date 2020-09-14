@@ -26,6 +26,7 @@ namespace Setup {
     Logger& logger,
     Rand& seedRand,
     int maxConcurrentEvals,
+    int expectedConcurrentEvals,
     int defaultNNXLen,
     int defaultNNYLen,
     int defaultMaxBatchSize,
@@ -39,6 +40,7 @@ namespace Setup {
     Logger& logger,
     Rand& seedRand,
     int maxConcurrentEvals,
+    int expectedConcurrentEvals,
     int defaultNNXLen,
     int defaultNNYLen,
     int defaultMaxBatchSize,
@@ -60,6 +62,10 @@ namespace Setup {
 
   //Komi is just set to 7.5 and is not read in from cfg
   Rules loadSingleRulesExceptForKomi(
+    ConfigParser& cfg
+  );
+
+  std::string loadHomeDataDirOverride(
     ConfigParser& cfg
   );
 

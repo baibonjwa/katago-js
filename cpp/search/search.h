@@ -137,13 +137,23 @@ struct Search {
   Player rootPla;
   Board rootBoard;
   BoardHistory rootHistory;
-  bool rootPassLegal;
   Loc rootHintLoc;
+
+  //External user-specified moves that are illegal or that should be nontrivially searched, and the number of turns for which they should
+  //be excluded. Empty if not active, else of length MAX_ARR_SIZE and nonzero anywhere a move should be banned, for the number of ply
+  //of depth that it should be banned.
+  std::vector<int> avoidMoveUntilByLocBlack;
+  std::vector<int> avoidMoveUntilByLocWhite;
 
   //Precomputed values at the root
   Color* rootSafeArea;
   //Used to center for dynamic scorevalue
   double recentScoreCenter;
+
+  //If the opponent is mirroring, then the color of that opponent, for countering mirroring
+  Player mirroringPla;
+  double mirrorAdvantage; //Number of points the opponent wins by if mirror holds indefinitely.
+  bool mirrorCenterIsSymmetric;
 
   bool alwaysIncludeOwnerMap;
 
@@ -199,8 +209,8 @@ struct Search {
 
   void setPlayerAndClearHistory(Player pla);
   void setKomiIfNew(float newKomi); //Does not clear history, does clear search unless komi is equal.
-  void setRootPassLegal(bool b);
   void setRootHintLoc(Loc hintLoc);
+  void setAvoidMoveUntilByLoc(const std::vector<int>& bVec, const std::vector<int>& wVec);
   void setAlwaysIncludeOwnerMap(bool b);
   void setParams(SearchParams params);
   void setParamsNoClearing(SearchParams params); //Does not clear search
@@ -293,9 +303,9 @@ struct Search {
   void getAnalysisData(const SearchNode& node, std::vector<AnalysisData>& buf, int minMovesToTryToGet, bool includeWeightFactors, int maxPVDepth) const;
 
   //Append the PV from node n onward (not including node n's move)
-  void appendPV(std::vector<Loc>& buf, std::vector<Loc>& scratchLocs, std::vector<double>& scratchValues, const SearchNode* n, int maxDepth) const;
+  void appendPV(std::vector<Loc>& buf, std::vector<int64_t>& visitsBuf, std::vector<Loc>& scratchLocs, std::vector<double>& scratchValues, const SearchNode* n, int maxDepth) const;
   //Append the PV from node n for specified move, assuming move is a child move of node n
-  void appendPVForMove(std::vector<Loc>& buf, std::vector<Loc>& scratchLocs, std::vector<double>& scratchValues, const SearchNode* n, Loc move, int maxDepth) const;
+  void appendPVForMove(std::vector<Loc>& buf, std::vector<int64_t>& visitsBuf, std::vector<Loc>& scratchLocs, std::vector<double>& scratchValues, const SearchNode* n, Loc move, int maxDepth) const;
 
   //Get the ownership map averaged throughout the search tree.
   //Must have ownership present on all neural net evals.
@@ -308,6 +318,8 @@ struct Search {
   void runSinglePlayout(SearchThread& thread);
 
   //Helpers-----------------------------------------------------------------------
+  int getPos(Loc moveLoc) const;
+
 private:
   static constexpr double POLICY_ILLEGAL_SELECTION_VALUE = -1e50;
 
@@ -317,7 +329,6 @@ private:
   double interpolateEarly(double halflife, double earlyValue, double value) const;
 
   void maybeAddPolicyNoiseAndTempAlreadyLocked(SearchThread& thread, SearchNode& node, bool isRoot) const;
-  int getPos(Loc moveLoc) const;
 
   bool isAllowedRootMove(Loc moveLoc) const;
 
@@ -387,6 +398,7 @@ private:
   ) const;
 
   void addLeafValue(SearchNode& node, double winValue, double noResultValue, double scoreMean, double scoreMeanSq, double lead, int32_t virtualLossesToSubtract);
+  void addCurentNNOutputAsLeafValue(SearchNode& node, int32_t virtualLossesToSubtract);
 
   void maybeRecomputeExistingNNOutput(
     SearchThread& thread, SearchNode& node, bool isRoot

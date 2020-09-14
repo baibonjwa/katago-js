@@ -11,7 +11,7 @@ extern "C" {
   extern int setBackend(int);
   extern int downloadModel(int);
   extern void removeModel();
-  extern int predict(int, int, int, int, int, int, int, int, int, int, int, int);
+  extern int predict(int, int, int, int, int, int, int, int, int, int);
   extern int jsGetModelVersion();
 }
 
@@ -125,7 +125,6 @@ struct InputBuffers {
 
   float* userInputBuffer; //Host pointer
   float* userInputGlobalBuffer; //Host pointer
-  bool* symmetriesBuffer; //Host pointer
 
   float* policyResults; //Host pointer
   float* valueResults; //Host pointer
@@ -164,7 +163,6 @@ struct InputBuffers {
 
     userInputBuffer = new float[(size_t)m.numInputChannels * maxBatchSize * xSize * ySize];
     userInputGlobalBuffer = new float[(size_t)m.numInputGlobalChannels * maxBatchSize];
-    symmetriesBuffer = new bool[NNInputs::NUM_SYMMETRY_BOOLS];
 
     policyResults = new float[(size_t)maxBatchSize * (1 + xSize * ySize)];
     valueResults = new float[(size_t)maxBatchSize * m.numValueChannels];
@@ -177,7 +175,6 @@ struct InputBuffers {
   ~InputBuffers() {
     delete[] userInputBuffer;
     delete[] userInputGlobalBuffer;
-    delete[] symmetriesBuffer;
     delete[] policyResults;
     delete[] valueResults;
     delete[] scoreValueResults;
@@ -196,7 +193,8 @@ ComputeContext* NeuralNet::createComputeContext(
   Logger* logger,
   int nnXLen,
   int nnYLen,
-  std::string openCLTunerFile,
+  const std::string& openCLTunerFile,
+  const std::string& homeDataDirOverride,
   bool openCLReTunePerBoardSize,
   enabled_t useFP16Mode,
   enabled_t useNHWCMode,
@@ -239,12 +237,14 @@ ComputeHandle* NeuralNet::createComputeHandle(
   int maxBatchSize,
   bool requireExactNNLen,
   bool inputsUseNHWC,
-  int gpuIdxForThisThread
+  int gpuIdxForThisThread,
+  int serverThreadIdx
 ) {
   (void)maxBatchSize;
   (void)requireExactNNLen;
   (void)inputsUseNHWC;
   (void)gpuIdxForThisThread;
+  (void)serverThreadIdx;
   if (setBackend(context->backend) == 1) {
     logger->write("backend was initialized");
   } else {
@@ -287,6 +287,7 @@ void NeuralNet::freeInputBuffers(InputBuffers* inputBuffers) {
   delete inputBuffers;
 }
 
+/*
 float* NeuralNet::getBatchEltSpatialInplace(InputBuffers* inputBuffers, int nIdx) {
   assert(nIdx < inputBuffers->maxBatchSize);
   return inputBuffers->userInputBuffer + (inputBuffers->singleInputElts * nIdx);
@@ -308,11 +309,14 @@ int NeuralNet::getBatchEltSpatialLen(const InputBuffers* inputBuffers) {
 int NeuralNet::getBatchEltGlobalLen(const InputBuffers* inputBuffers) {
  return inputBuffers->singleInputGlobalElts;
 }
+*/
 
 void NeuralNet::getOutput(
   ComputeHandle* gpuHandle,
   InputBuffers* buffers,
   int numBatchEltsFilled,
+  NNResultBuf** inputBufs,
+  int symmetry,
   std::vector<NNOutput*>& outputs
 ) {
   assert(numBatchEltsFilled <= buffers->maxBatchSize);
@@ -334,8 +338,6 @@ void NeuralNet::getOutput(
     gpuHandle->model->modelDesc.numInputChannels,
     (int)buffers->userInputGlobalBuffer,
     gpuHandle->model->modelDesc.numInputGlobalChannels,
-    (int)buffers->symmetriesBuffer,
-    NNInputs::NUM_SYMMETRY_BOOLS,
     (int)values,
     (int)miscvalues,
     (int)ownerships,
@@ -502,6 +504,7 @@ bool NeuralNet::testEvaluateGlobalPoolingResidualBlock(
   return false;
 }
 
+/*
 bool NeuralNet::testEvaluateSymmetry(
   int batchSize,
   int numChannels,
@@ -524,5 +527,5 @@ bool NeuralNet::testEvaluateSymmetry(
   (void)outputBuffer;
   return false;
 }
-
+*/
 #endif
