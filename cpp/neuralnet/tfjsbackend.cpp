@@ -3,6 +3,7 @@
 #include "../core/config_parser.h"
 #include "../neuralnet/nninterface.h"
 #include "../neuralnet/nninputs.h"
+#include "../neuralnet/nneval.h"
 #include "../neuralnet/modelversion.h"
 #include "../neuralnet/desc.h"
 
@@ -325,6 +326,21 @@ void NeuralNet::getOutput(
   int nnXLen = gpuHandle->nnXLen;
   int nnYLen = gpuHandle->nnYLen;
   int version = gpuHandle->model->modelDesc.version;
+
+  int numSpatialFeatures = NNModelVersion::getNumSpatialFeatures(version);
+  int numGlobalFeatures = NNModelVersion::getNumGlobalFeatures(version);
+  assert(numGlobalFeatures == buffers->singleInputGlobalElts);
+
+  for(int nIdx = 0; nIdx<batchSize; nIdx++) {
+    float* rowSpatialInput = buffers->userInputBuffer + (buffers->singleInputElts * nIdx);
+    float* rowGlobalInput = buffers->userInputGlobalBuffer + (buffers->singleInputGlobalElts * nIdx);
+
+    const float* rowGlobal = inputBufs[nIdx]->rowGlobal;
+    const float* rowSpatial = inputBufs[nIdx]->rowSpatial;
+    std::copy(rowGlobal,rowGlobal+numGlobalFeatures,rowGlobalInput);
+    SymmetryHelpers::copyInputsWithSymmetry(rowSpatial, rowSpatialInput, 1, nnYLen, nnXLen, numSpatialFeatures, true, symmetry);
+  }
+
   float values[batchSize][3];
   float miscvalues[batchSize][10];
   float ownerships[batchSize][361];

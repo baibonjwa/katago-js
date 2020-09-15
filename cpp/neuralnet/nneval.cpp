@@ -306,10 +306,12 @@ void NNEvaluator::spawnServerThreads() {
     );
     serverThreads.push_back(thread);
   }
-
+  /*
+  // For emscripten, I guess that you need to finish current thread to start invoked threads.
   unique_lock<std::mutex> lock(bufferMutex);
   while(numServerThreadsStartingUp > 0)
     mainThreadWaitingForSpawn.wait(lock);
+  */
 }
 
 void NNEvaluator::killServerThreads() {
@@ -358,12 +360,15 @@ void NNEvaluator::serve(
   }
   #endif
 
+  /*
+  // see a comment in spawnServerThreads.
   {
     lock_guard<std::mutex> lock(bufferMutex);
     numServerThreadsStartingUp--;
     if(numServerThreadsStartingUp <= 0)
       mainThreadWaitingForSpawn.notify_all();
   }
+  */
 
   vector<NNOutput*> outputBuf;
 
