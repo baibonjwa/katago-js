@@ -128,8 +128,6 @@ struct InputBuffers {
   float* userInputGlobalBuffer; //Host pointer
 
   float* policyResults; //Host pointer
-  float* valueResults; //Host pointer
-  float* scoreValueResults; //Host pointer
   float* ownershipResults; //Host pointer
 
   InputBuffers(const LoadedModel* loadedModel, int maxBatchSz, int nnXLen, int nnYLen) {
@@ -166,9 +164,7 @@ struct InputBuffers {
     userInputGlobalBuffer = new float[(size_t)m.numInputGlobalChannels * maxBatchSize];
 
     policyResults = new float[(size_t)maxBatchSize * (1 + xSize * ySize)];
-    valueResults = new float[(size_t)maxBatchSize * m.numValueChannels];
 
-    scoreValueResults = new float[(size_t)maxBatchSize * m.numScoreValueChannels];
     ownershipResults = new float[(size_t)maxBatchSize * xSize * ySize * m.numOwnershipChannels];
 
   }
@@ -177,8 +173,6 @@ struct InputBuffers {
     delete[] userInputBuffer;
     delete[] userInputGlobalBuffer;
     delete[] policyResults;
-    delete[] valueResults;
-    delete[] scoreValueResults;
     delete[] ownershipResults;
   }
 
@@ -375,14 +369,18 @@ void NeuralNet::getOutput(
     float* miscvalue = miscvalues[row];
     float* policy = policies[row];
 
+    float* policySrcBuf = buffers->policyResults + row * buffers->singlePolicyResultElts;
     float* policyProbs = output->policyProbs;
+    int policyPassIdx = buffers->singlePolicyResultElts - 1;
 
     //These are not actually correct, the client does the postprocessing to turn them into
     //policy probabilities and white game outcome probabilities
     //Also we don't fill in the nnHash here either
-    for (auto i = 0; i < gpuHandle->policySize; i++) {
-      policyProbs[i] = policy[2 * i];
+    for (auto i = 0; i < policyPassIdx; i++) {
+      policySrcBuf[i] = policy[2 * i];
     }
+    SymmetryHelpers::copyOutputsWithSymmetry(policySrcBuf, policyProbs, 1, nnYLen, nnXLen, symmetry);
+    policyProbs[policyPassIdx] = policy[policyPassIdx * 2];
 
     int numValueChannels = gpuHandle->model->modelDesc.numValueChannels;
     assert(numValueChannels == 3);
@@ -393,12 +391,14 @@ void NeuralNet::getOutput(
     //As above, these are NOT actually from white's perspective, but rather the player to move.
     //As usual the client does the postprocessing.
     if(output->whiteOwnerMap != NULL) {
+      float* ownershipSrcBuf = buffers->ownershipResults + row * nnXLen * nnYLen;
       assert(gpuHandle->model->modelDesc.numOwnershipChannels == 1);
       std::copy(
         ownership + row * nnXLen * nnYLen,
         ownership + (row+1) * nnXLen * nnYLen,
-        output->whiteOwnerMap
+        ownershipSrcBuf
       );
+      SymmetryHelpers::copyOutputsWithSymmetry(ownershipSrcBuf, output->whiteOwnerMap, 1, nnYLen, nnXLen, symmetry);
     }
 
     if(version >= 8) {
