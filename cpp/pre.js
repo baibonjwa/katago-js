@@ -142,10 +142,10 @@ GraphModelWrapper.prototype.getModelVersion = function() {
 
 if (Module['ENVIRONMENT_IS_PTHREAD']) {
     importScripts(
-        "//cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.3.0/dist/tf.min.js",
-        "//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.3.0/dist/tf-backend-wasm.min.js"
+        "//cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.4.0/dist/tf.min.js",
+        "//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.4.0/dist/tf-backend-wasm.min.js"
     );
-    tf.wasm.setWasmPaths("//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.3.0/dist/");
+    tf.wasm.setWasmPaths("//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.4.0/dist/");
     if (typeof OffscreenCanvas !== 'undefined') {
         self.document = {
             createElement: function() {
