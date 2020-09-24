@@ -1,8 +1,8 @@
 DISABLE_SYMMETRIES = true
 MODEL = g170-b6c96-s175395328-d26788732
 # Specify target board size below.
-#SIZE = 19
-SIZE = 7
+SIZE = 19
+#SIZE = 7
 TMP_DIR = tmp
 SAVED_MODEL_DIR = saved_model
 SAVED_MODEL = $(SAVED_MODEL_DIR)/saved_model.pb

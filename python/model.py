@@ -1087,8 +1087,8 @@ class Model:
     pass_output = tf.tensordot(g2_layer,matmulpass,axes=[[3],[0]])
     self.outputs_by_layer.append(("pass",pass_output))
     pass_output = tf.reshape(pass_output, [-1] + [1,2])
-    policy_output = tf.concat([policy_output,pass_output],axis=1, name="policy_output")
-
+    policy_output = tf.concat([policy_output,pass_output],axis=1)
+    policy_output = tf.transpose(policy_output, [0,2,1], name="policy_output")
     self.policy_output = policy_output
 
     #Value head---------------------------------------------------------------------------------

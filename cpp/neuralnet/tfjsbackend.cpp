@@ -128,6 +128,8 @@ struct InputBuffers {
   float* userInputGlobalBuffer; //Host pointer
 
   float* policyResults; //Host pointer
+  float* valueResults; //Host pointer
+  float* scoreValueResults; //Host pointer
   float* ownershipResults; //Host pointer
 
   InputBuffers(const LoadedModel* loadedModel, int maxBatchSz, int nnXLen, int nnYLen) {
@@ -164,15 +166,18 @@ struct InputBuffers {
     userInputGlobalBuffer = new float[(size_t)m.numInputGlobalChannels * maxBatchSize];
 
     policyResults = new float[(size_t)maxBatchSize * (1 + xSize * ySize)];
+    valueResults = new float[(size_t)maxBatchSize * m.numValueChannels];
 
+    scoreValueResults = new float[(size_t)maxBatchSize * m.numScoreValueChannels];
     ownershipResults = new float[(size_t)maxBatchSize * xSize * ySize * m.numOwnershipChannels];
-
   }
 
   ~InputBuffers() {
     delete[] userInputBuffer;
     delete[] userInputGlobalBuffer;
     delete[] policyResults;
+    delete[] valueResults;
+    delete[] scoreValueResults;
     delete[] ownershipResults;
   }
 
@@ -308,13 +313,13 @@ int NeuralNet::getBatchEltGlobalLen(const InputBuffers* inputBuffers) {
 
 void NeuralNet::getOutput(
   ComputeHandle* gpuHandle,
-  InputBuffers* buffers,
+  InputBuffers* inputBuffers,
   int numBatchEltsFilled,
   NNResultBuf** inputBufs,
   int symmetry,
   std::vector<NNOutput*>& outputs
 ) {
-  assert(numBatchEltsFilled <= buffers->maxBatchSize);
+  assert(numBatchEltsFilled <= inputBuffers->maxBatchSize);
   assert(numBatchEltsFilled > 0);
   int batchSize = numBatchEltsFilled;
   int nnXLen = gpuHandle->nnXLen;
@@ -323,11 +328,11 @@ void NeuralNet::getOutput(
 
   int numSpatialFeatures = NNModelVersion::getNumSpatialFeatures(version);
   int numGlobalFeatures = NNModelVersion::getNumGlobalFeatures(version);
-  assert(numGlobalFeatures == buffers->singleInputGlobalElts);
+  assert(numGlobalFeatures == inputBuffers->singleInputGlobalElts);
 
   for(int nIdx = 0; nIdx<batchSize; nIdx++) {
-    float* rowSpatialInput = buffers->userInputBuffer + (buffers->singleInputElts * nIdx);
-    float* rowGlobalInput = buffers->userInputGlobalBuffer + (buffers->singleInputGlobalElts * nIdx);
+    float* rowSpatialInput = inputBuffers->userInputBuffer + (inputBuffers->singleInputElts * nIdx);
+    float* rowGlobalInput = inputBuffers->userInputGlobalBuffer + (inputBuffers->singleInputGlobalElts * nIdx);
 
     const float* rowGlobal = inputBufs[nIdx]->rowGlobal;
     const float* rowSpatial = inputBufs[nIdx]->rowSpatial;
@@ -335,28 +340,23 @@ void NeuralNet::getOutput(
     SymmetryHelpers::copyInputsWithSymmetry(rowSpatial, rowSpatialInput, 1, nnYLen, nnXLen, numSpatialFeatures, true, symmetry);
   }
 
-  float values[batchSize][3];
-  float miscvalues[batchSize][10];
-  float ownerships[batchSize][361];
-  float policies[batchSize][724];
-
   clock_t start = clock();
   if(predict(
     batchSize,
-    (int)buffers->userInputBuffer,
+    (int)inputBuffers->userInputBuffer,
     nnXLen * nnYLen,
     gpuHandle->model->modelDesc.numInputChannels,
-    (int)buffers->userInputGlobalBuffer,
+    (int)inputBuffers->userInputGlobalBuffer,
     gpuHandle->model->modelDesc.numInputGlobalChannels,
-    (int)values,
-    (int)miscvalues,
-    (int)ownerships,
-    (int)policies
+    (int)inputBuffers->valueResults,
+    (int)inputBuffers->scoreValueResults,
+    (int)inputBuffers->ownershipResults,
+    (int)inputBuffers->policyResults
   ) != 1) {
     cerr << "predict error " << endl;
   }
   cerr << "predict time(ms): " << static_cast<double>(clock() - start) / CLOCKS_PER_SEC * 1000.0 << endl;
-  assert(!isnan(values[0][0]));
+  assert(!isnan(inputBuffers->valueResults[0]));
 
   assert(outputs.size() == batchSize);
 
@@ -364,67 +364,60 @@ void NeuralNet::getOutput(
     NNOutput* output = outputs[row];
     assert(output->nnXLen == nnXLen);
     assert(output->nnYLen == nnYLen);
-    float* value = values[row];
-    float* ownership = ownerships[row];
-    float* miscvalue = miscvalues[row];
-    float* policy = policies[row];
 
-    float* policySrcBuf = buffers->policyResults + row * buffers->singlePolicyResultElts;
+    const float* policySrcBuf = inputBuffers->policyResults + row * gpuHandle->policySize;
     float* policyProbs = output->policyProbs;
-    int policyPassIdx = buffers->singlePolicyResultElts - 1;
 
     //These are not actually correct, the client does the postprocessing to turn them into
     //policy probabilities and white game outcome probabilities
     //Also we don't fill in the nnHash here either
-    for (auto i = 0; i < policyPassIdx; i++) {
-      policySrcBuf[i] = policy[2 * i];
-    }
     SymmetryHelpers::copyOutputsWithSymmetry(policySrcBuf, policyProbs, 1, nnYLen, nnXLen, symmetry);
-    policyProbs[policyPassIdx] = policy[policyPassIdx * 2];
+    policyProbs[gpuHandle->policySize-1] = policySrcBuf[gpuHandle->policySize-1];
 
     int numValueChannels = gpuHandle->model->modelDesc.numValueChannels;
     assert(numValueChannels == 3);
-    output->whiteWinProb = value[row * numValueChannels];
-    output->whiteLossProb = value[row * numValueChannels + 1];
-    output->whiteNoResultProb = value[row * numValueChannels + 2];
+    output->whiteWinProb = inputBuffers->valueResults[row * numValueChannels];
+    output->whiteLossProb = inputBuffers->valueResults[row * numValueChannels + 1];
+    output->whiteNoResultProb = inputBuffers->valueResults[row * numValueChannels + 2];
 
     //As above, these are NOT actually from white's perspective, but rather the player to move.
     //As usual the client does the postprocessing.
     if(output->whiteOwnerMap != NULL) {
-      float* ownershipSrcBuf = buffers->ownershipResults + row * nnXLen * nnYLen;
+      const float* ownershipSrcBuf = inputBuffers->ownershipResults + row * nnXLen * nnYLen;
       assert(gpuHandle->model->modelDesc.numOwnershipChannels == 1);
-      std::copy(
-        ownership + row * nnXLen * nnYLen,
-        ownership + (row+1) * nnXLen * nnYLen,
-        ownershipSrcBuf
-      );
       SymmetryHelpers::copyOutputsWithSymmetry(ownershipSrcBuf, output->whiteOwnerMap, 1, nnYLen, nnXLen, symmetry);
     }
 
     if(version >= 8) {
       int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
       assert(numScoreValueChannels == 4);
-      output->whiteScoreMean = miscvalue[row * numScoreValueChannels];
-      output->whiteScoreMeanSq = miscvalue[row * numScoreValueChannels + 1];
-      output->whiteLead = miscvalue[row * numScoreValueChannels + 2];
-      output->varTimeLeft = miscvalue[row * numScoreValueChannels + 3];
-    } else if(version >= 4) {
+      output->whiteScoreMean = inputBuffers->scoreValueResults[row * numScoreValueChannels];
+      output->whiteScoreMeanSq = inputBuffers->scoreValueResults[row * numScoreValueChannels + 1];
+      output->whiteLead = inputBuffers->scoreValueResults[row * numScoreValueChannels + 2];
+      output->varTimeLeft = inputBuffers->scoreValueResults[row * numScoreValueChannels + 3];
+    }
+    else if(version >= 4) {
       int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
       assert(numScoreValueChannels == 2);
-      output->whiteScoreMean = miscvalue[row * numScoreValueChannels];
-      output->whiteScoreMeanSq = miscvalue[row * numScoreValueChannels + 1];
+      output->whiteScoreMean = inputBuffers->scoreValueResults[row * numScoreValueChannels];
+      output->whiteScoreMeanSq = inputBuffers->scoreValueResults[row * numScoreValueChannels + 1];
+      output->whiteLead = output->whiteScoreMean;
+      output->varTimeLeft = 0;
     }
     else if(version >= 3) {
       int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
       assert(numScoreValueChannels == 1);
-      output->whiteScoreMean = miscvalue[row * numScoreValueChannels];
+      output->whiteScoreMean = inputBuffers->scoreValueResults[row * numScoreValueChannels];
       //Version 3 neural nets don't have any second moment output, implicitly already folding it in, so we just use the mean squared
       output->whiteScoreMeanSq = output->whiteScoreMean * output->whiteScoreMean;
+      output->whiteLead = output->whiteScoreMean;
+      output->varTimeLeft = 0;
     }
     else {
       ASSERT_UNREACHABLE;
     }
   }
+
 }
 
 
