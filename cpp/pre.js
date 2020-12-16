@@ -47,8 +47,7 @@ GraphModelWrapper.prototype.setBackend = function(backend) {
     var be;
     switch (backend) {
         case this.AUTO:
-        be = typeof OffscreenCanvas !== 'undefined' ? "webgl" : "cpu";
-        // be = "wasm";
+        be = typeof OffscreenCanvas !== 'undefined' ? "webgl" : "wasm";
         break;
         case this.CPU:
         be = "cpu";
@@ -64,6 +63,7 @@ GraphModelWrapper.prototype.setBackend = function(backend) {
     }
     return Asyncify.handleSleep(function(wakeUp) {
         tf.setBackend(be).then(function(s) {
+            console.log("setBackend", be, s);
             wakeUp(s ? 1 : 0);
         });
     });
@@ -103,10 +103,12 @@ GraphModelWrapper.prototype.predict = function(
         try {
             const bin_inputs = new Float32Array(Module.HEAPF32.buffer, inputBuffer, batches * boardWxH * inputBufferChannels);
             const global_inputs = new Float32Array(Module.HEAPF32.buffer, inputGlobalBuffer, batches * inputGlobalBufferChannels);
+            const start = Date.now();
             this.model.executeAsync({
                 "swa_model/bin_inputs": tf.tensor(bin_inputs, [batches, boardWxH, inputBufferChannels], 'float32'),
                 "swa_model/global_inputs": tf.tensor(global_inputs, [batches, inputGlobalBufferChannels], 'float32'),
             }).then(function(results) {
+                console.log("executeAsync", Date.now() - start);
                 var i;
                 const miscvaluesSize = this.version === 8 ? 10 : 6;
                 for (i = 0; i < results.length; i++) {
@@ -142,10 +144,10 @@ GraphModelWrapper.prototype.getModelVersion = function() {
 
 if (Module['ENVIRONMENT_IS_PTHREAD']) {
     importScripts(
-        "//cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.4.0/dist/tf.min.js",
-        "//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.4.0/dist/tf-backend-wasm.min.js"
+        "//cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.8.0/dist/tf.min.js",
+        "//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.8.0/dist/tf-backend-wasm.min.js"
     );
-    tf.wasm.setWasmPaths("//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.4.0/dist/");
+    tf.wasm.setWasmPaths("//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.8.0/dist/");
     if (typeof OffscreenCanvas !== 'undefined') {
         self.document = {
             createElement: function() {
