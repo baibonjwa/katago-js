@@ -15,8 +15,8 @@
 #include <sstream>
 #include <fstream>
 
-#include <boost/filesystem.hpp>
-namespace bfs = boost::filesystem;
+#include <ghc/filesystem.hpp>
+namespace gfs = ghc::filesystem;
 
 using namespace std;
 
@@ -157,7 +157,7 @@ int MainCmds::benchmark(int argc, const char* const* argv) {
   logger.setLogToStdout(true);
   logger.write("Loading model and initializing benchmark...");
 
-  SearchParams params = Setup::loadSingleParams(cfg);
+  SearchParams params = Setup::loadSingleParams(cfg,Setup::SETUP_FOR_BENCHMARK);
   params.maxVisits = maxVisits;
   params.maxPlayouts = maxVisits;
   params.maxTime = 1e20;
@@ -279,8 +279,9 @@ static NNEvaluator* createNNEval(int maxNumThreads, CompactSgf* sgf, const strin
     expectedConcurrentEvals = 2;
 #endif
 
+  string expectedSha256 = "";
   NNEvaluator* nnEval = Setup::initializeNNEvaluator(
-    modelFile,modelFile,cfg,logger,seedRand,maxConcurrentEvals,expectedConcurrentEvals,
+    modelFile,modelFile,expectedSha256,cfg,logger,seedRand,maxConcurrentEvals,expectedConcurrentEvals,
     sgf->xSize,sgf->ySize,defaultMaxBatchSize,
     Setup::SETUP_FOR_BENCHMARK
   );
@@ -408,14 +409,18 @@ static vector<PlayUtils::BenchmarkResults> doAutoTuneThreads(
 
   sort(possibleNumbersOfThreads.begin(), possibleNumbersOfThreads.end());
 
-  int ternarySearchMin = 1;
-  int ternarySearchMax = ternarySearchInitialMax;
+  //Adjusted for number of GPUs - it makes no sense to test low values if you have lots of GPUs
+  int ternarySearchMin = nnEval->getNumGpus();
+  int ternarySearchMax = (int)round(ternarySearchInitialMax * 0.5 * (1 + nnEval->getNumGpus()));
+  if(ternarySearchMax < ternarySearchMin * 4)
+    ternarySearchMax = ternarySearchMin * 4;
+
   while(true) {
     reallocateNNEvalWithEnoughBatchSize(ternarySearchMax);
     cout << endl;
 
     int start = 0;
-    int end = possibleNumbersOfThreads.size()-1;
+    int end = (int)possibleNumbersOfThreads.size()-1;
     for(int i = 0; i < possibleNumbersOfThreads.size(); i++) {
       if(possibleNumbersOfThreads[i] < ternarySearchMin) {
         start = i + 1;
@@ -462,11 +467,11 @@ static vector<PlayUtils::BenchmarkResults> doAutoTuneThreads(
       }
     }
 
-    // If our optimal thread count is in the top 2/3 of the maximum search limit, triple the search limit and repeat.
+    //If our optimal thread count is in the top 2/3 of the maximum search limit, increase the search limit and repeat.
     if(3 * bestThreads > 2 * ternarySearchMax && ternarySearchMax < 5000) {
       ternarySearchMin = ternarySearchMax / 2;
-      ternarySearchMax *= 3;
-      cout << endl << endl << "Optimal number of threads is fairly high, tripling the search limit and trying again." << endl << endl;
+      ternarySearchMax = ternarySearchMax * 2 + 32;
+      cout << endl << endl << "Optimal number of threads is fairly high, increasing the search limit and trying again." << endl << endl;
       continue;
     }
     else {
@@ -542,7 +547,7 @@ int MainCmds::genconfig(int argc, const char* const* argv, const char* firstComm
       throw StringError("Please answer y or n");
   };
 
-  if(bfs::exists(bfs::path(outputFile))) {
+  if(gfs::exists(gfs::path(outputFile))) {
     bool b = false;
     promptAndParseInput("File " + outputFile + " already exists, okay to overwrite it with an entirely new config (y/n)?\n", [&](const string& line) { parseYN(line,b); });
     if(!b) {
@@ -754,7 +759,7 @@ int MainCmds::genconfig(int argc, const char* const* argv, const char* firstComm
   cout << "PERFORMANCE TUNING" << endl;
 
   bool skipThreadTuning = false;
-  if(bfs::exists(bfs::path(outputFile))) {
+  if(gfs::exists(gfs::path(outputFile))) {
     int oldConfigNumSearchThreads = -1;
     try {
       ConfigParser oldCfg(outputFile);
@@ -832,7 +837,7 @@ int MainCmds::genconfig(int argc, const char* const* argv, const char* firstComm
     logger.setLogToStdout(true);
     logger.write("Loading model and initializing benchmark...");
 
-    SearchParams params = Setup::loadSingleParams(cfg);
+    SearchParams params = Setup::loadSingleParams(cfg,Setup::SETUP_FOR_BENCHMARK);
     params.maxVisits = defaultMaxVisits;
     params.maxPlayouts = defaultMaxVisits;
     params.maxTime = 1e20;
@@ -841,22 +846,28 @@ int MainCmds::genconfig(int argc, const char* const* argv, const char* firstComm
 
     Setup::initializeSession(cfg);
 
+    int maxNumThreadsForCurrentNNEval = -1;
     NNEvaluator* nnEval = NULL;
     auto reallocateNNEvalWithEnoughBatchSize = [&](int maxNumThreads) {
+      if(nnEval != NULL && maxNumThreads <= maxNumThreadsForCurrentNNEval)
+        return;
       if(nnEval != NULL)
         delete nnEval;
       nnEval = createNNEval(maxNumThreads, sgf, modelFile, logger, cfg, params);
+      maxNumThreadsForCurrentNNEval = maxNumThreads;
     };
     cout << endl;
 
     int64_t maxVisits;
     if(maxVisitsFromUser > 0) {
       maxVisits = maxVisitsFromUser;
+      //Make sure we have an nneval that isn't null
+      reallocateNNEvalWithEnoughBatchSize(ternarySearchInitialMax);
     }
     else {
       cout << "Running quick initial benchmark at 16 threads!" << endl;
       vector<int> numThreads = {16};
-      reallocateNNEvalWithEnoughBatchSize(ternarySearchInitialMax);
+      reallocateNNEvalWithEnoughBatchSize(std::max(16,ternarySearchInitialMax));
       vector<PlayUtils::BenchmarkResults> results = doFixedTuneThreads(params,sgf,3,nnEval,logger,secondsPerGameMove,numThreads,false);
       double visitsPerSecond = results[0].totalVisits / (results[0].totalSeconds + 0.00001);
       //Make tests use about 2 seconds each

@@ -213,6 +213,11 @@ void Board::clearSimpleKoLoc() {
   ko_loc = NULL_LOC;
 }
 
+//Gets the number of stones of the chain at loc. Precondition: location must be black or white.
+int Board::getChainSize(Loc loc) const
+{
+  return chain_data[chain_head[loc]].num_locs;
+}
 
 //Gets the number of liberties of the chain at loc. Assertion: location must be black or white.
 int Board::getNumLiberties(Loc loc) const
@@ -466,6 +471,23 @@ bool Board::isSimpleEye(Loc loc, Player pla) const
   return true;
 }
 
+bool Board::wouldBeCapture(Loc loc, Player pla) const {
+  if(colors[loc] != C_EMPTY)
+    return false;
+  Player opp = getOpp(pla);
+  FOREACHADJ(
+    Loc adj = loc + ADJOFFSET;
+    if(colors[adj] == opp)
+    {
+      if(getNumLiberties(adj) == 1)
+        return true;
+    }
+  );
+
+  return false;
+}
+
+
 bool Board::wouldBeKoCapture(Loc loc, Player pla) const {
   if(colors[loc] != C_EMPTY)
     return false;
@@ -585,6 +607,18 @@ bool Board::isEmpty() const {
     }
   }
   return true;
+}
+
+int Board::numStonesOnBoard() const {
+  int num = 0;
+  for(int y = 0; y < y_size; y++) {
+    for(int x = 0; x < x_size; x++) {
+      Loc loc = Location::getLoc(x,y,x_size);
+      if(colors[loc] == C_BLACK || colors[loc] == C_WHITE)
+        num += 1;
+    }
+  }
+  return num;
 }
 
 bool Board::setStone(Loc loc, Color color)

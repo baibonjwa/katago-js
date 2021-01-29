@@ -62,7 +62,7 @@ In addition to a basic set of [GTP commands](https://www.lysator.liu.se/~gunnar/
          * `absolute` should be followed by a single float `MAINTIME` specifying the time in seconds.
          * `canadian` should be followed by `MAINTIME BYOYOMITIME BYOYOMISTONES` (float,float,int) specifying the main time, the length of the canadian overtime period, and the number of stones that must be played in that period.
          * `byoyomi` should be followed by `MAINTIME BYOYOMITIME BYOYOMIPERIODS` (float,float,int) specifying the main time, the length of each byo-yomi period, and the number of byo-yomi periods.
-      * NOTE: As a hack, KGS also expects that when using `byoyomi`, the controller should provide the number of periods left in place of the number of stones left for the GTP `time-settings` command.
+      * NOTE: As a hack, KGS also expects that when using `byoyomi`, the controller should provide the number of periods left in place of the number of stones left for the GTP `time_left` command.
    * `lz-analyze [player (optional)] [interval (optional)] KEYVALUEPAIR KEYVALUEPAIR ...`
       * Begin searching and optionally outputting live analysis to stdout. Assumes the normal player to move next unless otherwise specified.
       * Possible key-value pairs:
@@ -125,7 +125,7 @@ In addition to a basic set of [GTP commands](https://www.lysator.liu.se/~gunnar/
   * `kata-raw-nn SYMMETRY`
      * `SYMMETRY` should be an integer from 0-7 or "all".
      * Reports the result of a raw neural net evaluation from KataGo, or multiple raw evaluations in the case of "all".
-     * Output format is of the form `SYMMETRY <integer 0-7> <key> <value(s)> <key> <value(s)> ...`, possibly with additional whitespace or newlines between any tokens. In the case of "all", multiple such outputs of this form are concatenated together.
+     * Output format is of the form `symmetry <integer 0-7> <key> <value(s)> <key> <value(s)> ...`, possibly with additional whitespace or newlines between any tokens. In the case of "all", multiple such outputs of this form are concatenated together.
      * Possible keys are currently
      ```
      whiteWin (1 float)  - believed probability that white wins
@@ -135,6 +135,7 @@ In addition to a basic set of [GTP commands](https://www.lysator.liu.se/~gunnar/
      whiteScoreSelfplay (1 float) - predicted mean score that would result from low-playout noisy selfplay (may be biased, Kata isn't fully score-maximizing).
      whiteScoreSelfplaySq (1 float) - predicted mean square of score that would result via low-playout noisy selfplay
      policy (boardXSize * boardYSize floats, including possibly NAN for illegal moves) - policy distribution for next move
+     policyPass (1 floats) - policy probability for the pass move
      whiteOwnership (boardXSize * boardYSize floats) - predicted ownership by white (from -1 to 1).
      ```
      Any consumers of this data should attempt to be robust to any pattern of whitespace within the output, as well as possibly the future addition of new keys and values. The ordering of the keys is also not guaranteed - consumers should be capable of handling any permutation of them.
