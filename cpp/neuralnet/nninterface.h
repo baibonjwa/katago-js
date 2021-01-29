@@ -81,7 +81,7 @@ namespace NeuralNet {
   // gpuIdxForThisThread == -1 indicates to select a default GPU.
   ComputeHandle* createComputeHandle(
     ComputeContext* context,
-    const LoadedModel* loadedModel,
+    LoadedModel* loadedModel,
     Logger* logger,
     int maxBatchSize,
     bool requireExactNNLen,

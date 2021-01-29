@@ -62,20 +62,6 @@ struct LoadedModel {
        So you need to load the tfjs model in NNEvaluator thread.
     */
     name = fileName;
-    modelDesc.version = 8;
-    if (modelDesc.version == 8) {
-      modelDesc.numInputChannels = 22;
-      modelDesc.numInputGlobalChannels = 19;
-      modelDesc.numValueChannels = 3;
-      modelDesc.numOwnershipChannels = 1;
-      modelDesc.numScoreValueChannels = 4;
-    } else if (modelDesc.version == 5) {
-      modelDesc.numInputChannels = 22;
-      modelDesc.numInputGlobalChannels = 14;
-      modelDesc.numValueChannels = 3;
-      modelDesc.numOwnershipChannels = 1;
-      modelDesc.numScoreValueChannels = 2;
-    }
   }
 
   LoadedModel() = delete;
@@ -232,7 +218,7 @@ Rules NeuralNet::getSupportedRules(const LoadedModel* loadedModel, const Rules& 
 
 ComputeHandle* NeuralNet::createComputeHandle(
   ComputeContext* context,
-  const LoadedModel* loadedModel,
+  LoadedModel* loadedModel,
   Logger* logger,
   int maxBatchSize,
   bool requireExactNNLen,
@@ -265,6 +251,26 @@ ComputeHandle* NeuralNet::createComputeHandle(
     logger->write("backend: unkown");
   }
   if (downloadModel((int)loadedModel->name.c_str()) == 1) {
+    loadedModel->modelDesc.version = getModelVersion(loadedModel);
+    if (loadedModel->modelDesc.version >= 9) {
+      loadedModel->modelDesc.numInputChannels = 22;
+      loadedModel->modelDesc.numInputGlobalChannels = 19;
+      loadedModel->modelDesc.numValueChannels = 3;
+      loadedModel->modelDesc.numOwnershipChannels = 1;
+      loadedModel->modelDesc.numScoreValueChannels = 6;
+    } else if (loadedModel->modelDesc.version == 8) {
+      loadedModel->modelDesc.numInputChannels = 22;
+      loadedModel->modelDesc.numInputGlobalChannels = 19;
+      loadedModel->modelDesc.numValueChannels = 3;
+      loadedModel->modelDesc.numOwnershipChannels = 1;
+      loadedModel->modelDesc.numScoreValueChannels = 4;
+    } else if (loadedModel->modelDesc.version == 5) {
+      loadedModel->modelDesc.numInputChannels = 22;
+      loadedModel->modelDesc.numInputGlobalChannels = 14;
+      loadedModel->modelDesc.numValueChannels = 3;
+      loadedModel->modelDesc.numOwnershipChannels = 1;
+      loadedModel->modelDesc.numScoreValueChannels = 2;
+    }
     return new ComputeHandle(loadedModel, context->nnXLen, context->nnYLen);
   } else {
     logger->write("Failed downloadModel");
@@ -387,13 +393,25 @@ void NeuralNet::getOutput(
       SymmetryHelpers::copyOutputsWithSymmetry(ownershipSrcBuf, output->whiteOwnerMap, 1, nnYLen, nnXLen, inputBufs[row]->symmetry);
     }
 
-    if(version >= 8) {
+    if(version >= 9) {
       int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
       assert(numScoreValueChannels == 4);
       output->whiteScoreMean = inputBuffers->scoreValueResults[row * numScoreValueChannels];
       output->whiteScoreMeanSq = inputBuffers->scoreValueResults[row * numScoreValueChannels + 1];
       output->whiteLead = inputBuffers->scoreValueResults[row * numScoreValueChannels + 2];
       output->varTimeLeft = inputBuffers->scoreValueResults[row * numScoreValueChannels + 3];
+      output->shorttermWinlossError = inputBuffers->scoreValueResults[row * numScoreValueChannels + 4];
+      output->shorttermScoreError = inputBuffers->scoreValueResults[row * numScoreValueChannels + 5];
+    }
+    else if(version >= 8) {
+      int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
+      assert(numScoreValueChannels == 4);
+      output->whiteScoreMean = inputBuffers->scoreValueResults[row * numScoreValueChannels];
+      output->whiteScoreMeanSq = inputBuffers->scoreValueResults[row * numScoreValueChannels + 1];
+      output->whiteLead = inputBuffers->scoreValueResults[row * numScoreValueChannels + 2];
+      output->varTimeLeft = inputBuffers->scoreValueResults[row * numScoreValueChannels + 3];
+      output->shorttermWinlossError = 0;
+      output->shorttermScoreError = 0;
     }
     else if(version >= 4) {
       int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
@@ -402,6 +420,8 @@ void NeuralNet::getOutput(
       output->whiteScoreMeanSq = inputBuffers->scoreValueResults[row * numScoreValueChannels + 1];
       output->whiteLead = output->whiteScoreMean;
       output->varTimeLeft = 0;
+      output->shorttermWinlossError = 0;
+      output->shorttermScoreError = 0;
     }
     else if(version >= 3) {
       int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
@@ -411,6 +431,8 @@ void NeuralNet::getOutput(
       output->whiteScoreMeanSq = output->whiteScoreMean * output->whiteScoreMean;
       output->whiteLead = output->whiteScoreMean;
       output->varTimeLeft = 0;
+      output->shorttermWinlossError = 0;
+      output->shorttermScoreError = 0;
     }
     else {
       ASSERT_UNREACHABLE;
