@@ -5,19 +5,14 @@
 #include "../program/setup.h"
 #include "../main.h"
 
-#if !defined(__EMSCRIPTEN__)
 #include <ghc/filesystem.hpp>
 namespace gfs = ghc::filesystem;
-#endif
 
 using namespace std;
 
 //--------------------------------------------------------------------------------------
 
 static bool doesPathExist(const string& path) {
-#if defined(__EMSCRIPTEN__)
-  return false;
-#else
   try {
     gfs::path gfsPath(path);
     return gfs::exists(gfsPath);
@@ -25,13 +20,12 @@ static bool doesPathExist(const string& path) {
   catch(const gfs::filesystem_error&) {
     return false;
   }
-#endif
 }
 
 static string getDefaultConfigPathForHelp(const string& defaultConfigFileName) {
   return HomeData::getDefaultFilesDirForHelpMessage() + "/" + defaultConfigFileName;
 }
-#if !defined(__EMSCRIPTEN__)
+
 static vector<string> getDefaultConfigPaths(const string& defaultConfigFileName) {
   vector<string> v = HomeData::getDefaultFilesDirs();
   for(int i = 0; i<v.size(); i++) {
@@ -39,13 +33,11 @@ static vector<string> getDefaultConfigPaths(const string& defaultConfigFileName)
   }
   return v;
 }
-#endif
 
 static string getDefaultModelPathForHelp() {
   return HomeData::getDefaultFilesDirForHelpMessage() + "/" + "default_model.bin.gz";
 }
 
-#if !defined(__EMSCRIPTEN__)
 static vector<string> getDefaultModelPaths() {
   vector<string> dirs = HomeData::getDefaultFilesDirs();
   vector<string> ret;
@@ -55,7 +47,6 @@ static vector<string> getDefaultModelPaths() {
   }
   return ret;
 }
-#endif
 
 //--------------------------------------------------------------------------------------
 
@@ -257,7 +248,6 @@ void KataGoCommandLine::addOverrideConfigArg() {
 string KataGoCommandLine::getModelFile() const {
   assert(modelFileArg != NULL);
   string modelFile = modelFileArg->getValue();
-  #if !defined(__EMSCRIPTEN__)
   if(modelFile.empty()) {
     string pathForErrMsg;
     try {
@@ -275,7 +265,6 @@ string KataGoCommandLine::getModelFile() const {
       pathForErrMsg = getDefaultModelPathForHelp();
     throw StringError("-model MODELFILENAME.bin.gz was not specified to tell KataGo where to find the neural net model, and default was not found at " + pathForErrMsg);
   }
-  #endif
   return modelFile;
 }
 

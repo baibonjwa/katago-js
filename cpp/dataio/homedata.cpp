@@ -5,9 +5,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <pwd.h>
-#if !defined(__EMSCRIPTEN__)
 #include <ghc/filesystem.hpp>
-#endif
 #endif
 #ifdef OS_IS_WINDOWS
 #include <windows.h>
@@ -89,7 +87,6 @@ string HomeData::getHomeDataDir(bool makeDir, const string& homeDataDirOverride)
 #endif
 
 #ifdef OS_IS_UNIX_OR_APPLE
-#if !defined(__EMSCRIPTEN__)
 //On Linux, this function returns two locations:
 //The directory containing the excutable.
 //A katago-specific subdirectory of the home directory, same as getHomeDataDir.
@@ -108,13 +105,11 @@ vector<string> HomeData::getDefaultFilesDirs() {
   ret.push_back(getHomeDataDir(false,""));
   return ret;
 }
-#endif
 
 string HomeData::getDefaultFilesDirForHelpMessage() {
   return "(dir containing katago.exe, or else ~/.katago)";
 }
 
-#if !defined(__EMSCRIPTEN__)
 string HomeData::getHomeDataDir(bool makeDir, const string& homeDataDirOverride) {
   if(homeDataDirOverride != "") {
     if(makeDir) MakeDir::make(homeDataDirOverride);
@@ -153,5 +148,4 @@ string HomeData::getHomeDataDir(bool makeDir, const string& homeDataDirOverride)
   if(makeDir) MakeDir::make(homeDataDir);
   return homeDataDir;
 }
-#endif
 #endif
