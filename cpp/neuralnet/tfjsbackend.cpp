@@ -395,7 +395,7 @@ void NeuralNet::getOutput(
 
     if(version >= 9) {
       int numScoreValueChannels = gpuHandle->model->modelDesc.numScoreValueChannels;
-      assert(numScoreValueChannels == 4);
+      assert(numScoreValueChannels == 6);
       output->whiteScoreMean = inputBuffers->scoreValueResults[row * numScoreValueChannels];
       output->whiteScoreMeanSq = inputBuffers->scoreValueResults[row * numScoreValueChannels + 1];
       output->whiteLead = inputBuffers->scoreValueResults[row * numScoreValueChannels + 2];
