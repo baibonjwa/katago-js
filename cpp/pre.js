@@ -61,10 +61,20 @@ GraphModelWrapper.prototype.setBackend = function(backend) {
         default:
         return;
     }
-    return Asyncify.handleSleep(function(wakeUp) {
-        tf.setBackend(be).then(function(s) {
+    return Asyncify.handleSleep(wakeUp => {
+        tf.setBackend(be).then(s => {
             console.log("setBackend", be, s);
-            wakeUp(s ? 1 : 0);
+            if (s) {
+                wakeUp(1);
+            } else if (backend === this.AUTO && be === "webgl") {
+                // OffscreenCanvasが存在してもsetBackendが失敗するケースがあるのでwasmにフォールバックさせる
+                console.log("try wasm for setBackend");
+                tf.setBackend("wasm").then(s => {
+                    wakeUp(s ? 1 : 0);
+                });
+            } else {
+                wakeUp(0);
+            }
         });
     });
 };
@@ -152,11 +162,11 @@ GraphModelWrapper.prototype.getModelVersion = function() {
 };
 
 if (Module['ENVIRONMENT_IS_PTHREAD']) {
+    const version ="2.8.2"
     importScripts(
-        "//cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.8.0/dist/tf.min.js",
-        "//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.8.0/dist/tf-backend-wasm.min.js"
-    );
-    tf.wasm.setWasmPaths("//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@2.8.0/dist/");
+        `//cdn.jsdelivr.net/npm/@tensorflow/tfjs@${version}/dist/tf.min.js`,
+        `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`    );
+    tf.wasm.setWasmPaths(`//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/`);
     if (typeof OffscreenCanvas !== 'undefined') {
         self.document = {
             createElement: function() {
