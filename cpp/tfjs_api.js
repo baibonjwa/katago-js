@@ -26,6 +26,7 @@ mergeInto(LibraryManager.library, {
         const inst = new GraphModelWrapper();
         _getBackend = inst.getBackend.bind(inst);
         _setBackend = inst.setBackend.bind(inst);
+        _downloadMetadata = inst.downloadMetadata.bind(inst);
         _downloadModel = inst.downloadModel.bind(inst);
         _removeModel = inst.removeModel.bind(inst);
         _predict = inst.predict.bind(inst);
@@ -39,6 +40,10 @@ mergeInto(LibraryManager.library, {
         console.log("setBackend. should not reach");
     },
     setBackend__deps: ['$method_support'],
+    downloadMetadata: function() {
+        console.log("downloadMetadata. should not reach");
+    },
+    downloadMetadata__deps: ['$method_support'],
     downloadModel: function() {
         console.log("downloadModel. should not reach");
     },

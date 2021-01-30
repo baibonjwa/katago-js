@@ -10,6 +10,7 @@
 extern "C" {
   extern int getBackend();
   extern int setBackend(int);
+  extern int downloadMetadata(int);
   extern int downloadModel(int);
   extern void removeModel();
   extern int predict(int, int, int, int, int, int, int, int, int, int);
@@ -62,6 +63,28 @@ struct LoadedModel {
        So you need to load the tfjs model in NNEvaluator thread.
     */
     name = fileName;
+    if (downloadMetadata((int)name.c_str()) == 1) {
+      modelDesc.version = jsGetModelVersion();
+      if (modelDesc.version >= 9) {
+        modelDesc.numInputChannels = 22;
+        modelDesc.numInputGlobalChannels = 19;
+        modelDesc.numValueChannels = 3;
+        modelDesc.numOwnershipChannels = 1;
+        modelDesc.numScoreValueChannels = 6;
+      } else if (modelDesc.version == 8) {
+        modelDesc.numInputChannels = 22;
+        modelDesc.numInputGlobalChannels = 19;
+        modelDesc.numValueChannels = 3;
+        modelDesc.numOwnershipChannels = 1;
+        modelDesc.numScoreValueChannels = 4;
+      } else if (modelDesc.version == 5) {
+        modelDesc.numInputChannels = 22;
+        modelDesc.numInputGlobalChannels = 14;
+        modelDesc.numValueChannels = 3;
+        modelDesc.numOwnershipChannels = 1;
+        modelDesc.numScoreValueChannels = 2;
+      }
+    }
   }
 
   LoadedModel() = delete;
@@ -218,7 +241,7 @@ Rules NeuralNet::getSupportedRules(const LoadedModel* loadedModel, const Rules& 
 
 ComputeHandle* NeuralNet::createComputeHandle(
   ComputeContext* context,
-  LoadedModel* loadedModel,
+  const LoadedModel* loadedModel,
   Logger* logger,
   int maxBatchSize,
   bool requireExactNNLen,
@@ -251,26 +274,6 @@ ComputeHandle* NeuralNet::createComputeHandle(
     logger->write("backend: unkown");
   }
   if (downloadModel((int)loadedModel->name.c_str()) == 1) {
-    loadedModel->modelDesc.version = getModelVersion(loadedModel);
-    if (loadedModel->modelDesc.version >= 9) {
-      loadedModel->modelDesc.numInputChannels = 22;
-      loadedModel->modelDesc.numInputGlobalChannels = 19;
-      loadedModel->modelDesc.numValueChannels = 3;
-      loadedModel->modelDesc.numOwnershipChannels = 1;
-      loadedModel->modelDesc.numScoreValueChannels = 6;
-    } else if (loadedModel->modelDesc.version == 8) {
-      loadedModel->modelDesc.numInputChannels = 22;
-      loadedModel->modelDesc.numInputGlobalChannels = 19;
-      loadedModel->modelDesc.numValueChannels = 3;
-      loadedModel->modelDesc.numOwnershipChannels = 1;
-      loadedModel->modelDesc.numScoreValueChannels = 4;
-    } else if (loadedModel->modelDesc.version == 5) {
-      loadedModel->modelDesc.numInputChannels = 22;
-      loadedModel->modelDesc.numInputGlobalChannels = 14;
-      loadedModel->modelDesc.numValueChannels = 3;
-      loadedModel->modelDesc.numOwnershipChannels = 1;
-      loadedModel->modelDesc.numScoreValueChannels = 2;
-    }
     return new ComputeHandle(loadedModel, context->nnXLen, context->nnYLen);
   } else {
     logger->write("Failed downloadModel");

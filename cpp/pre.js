@@ -69,21 +69,30 @@ GraphModelWrapper.prototype.setBackend = function(backend) {
     });
 };
 
+GraphModelWrapper.prototype.downloadMetadata = function(charp) {
+    return Asyncify.handleSleep((function(wakeUp) {
+        const model = UTF8ToString(charp);
+        loadJSON(model + "/metadata.json")
+            .then((function(json) {
+                this.version = json.version;
+                wakeUp(1);
+            }).bind(this))
+            .catch(function(error) {
+                console.log(error);
+                wakeUp(0);
+            });
+    }).bind(this));
+};
+
 GraphModelWrapper.prototype.downloadModel = function(charp) {
     return Asyncify.handleSleep((function(wakeUp) {
         const model = UTF8ToString(charp);
-        Promise.all([
-            loadJSON(model + "/metadata.json")
-                .then((function(json) {
-                    this.version = json.version;
-                }).bind(this)),
-            tf.loadGraphModel(model + "/model.json")
-                .then((function(model) {
-                    this.model = model;
-                }).bind(this))
-        ]).then(function() {
+        tf.loadGraphModel(model + "/model.json")
+        .then((function(model) {
+            this.model = model;
             wakeUp(1);
-        }).catch(function(errors) {
+        }).bind(this))
+        .catch(function(errors) {
             console.log(errors);
             wakeUp(0);
         });
