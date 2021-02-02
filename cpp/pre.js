@@ -127,7 +127,7 @@ GraphModelWrapper.prototype.predict = function(
                 "swa_model/bin_inputs": tf.tensor(bin_inputs, [batches, boardWxH, inputBufferChannels], 'float32'),
                 "swa_model/global_inputs": tf.tensor(global_inputs, [batches, inputGlobalBufferChannels], 'float32'),
             }).then(function(results) {
-                console.log("executeAsync", Date.now() - start);
+                // console.log("executeAsync", Date.now() - start);
                 var i;
                 const miscvaluesSize = this.version === 8 ? 10 : 6;
                 for (i = 0; i < results.length; i++) {
@@ -162,7 +162,7 @@ GraphModelWrapper.prototype.getModelVersion = function() {
 };
 
 if (Module['ENVIRONMENT_IS_PTHREAD']) {
-    const version ="2.8.2"
+    const version ="3.0.0"
     importScripts(
         `//cdn.jsdelivr.net/npm/@tensorflow/tfjs@${version}/dist/tf.min.js`,
         `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`    );
