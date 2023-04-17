@@ -29,6 +29,7 @@ GraphModelWrapper.prototype.AUTO = 0;
 GraphModelWrapper.prototype.CPU = 1;
 GraphModelWrapper.prototype.WEBGL = 2;
 GraphModelWrapper.prototype.WASM = 3;
+GraphModelWrapper.prototype.WEBGPU = 4;
 
 GraphModelWrapper.prototype.getBackend = function() {
     switch (tf.getBackend()) {
@@ -38,6 +39,8 @@ GraphModelWrapper.prototype.getBackend = function() {
         return this.WEBGL;
         case "wasm":
         return this.WASM;
+        case "webgpu":
+        return this.WEBGPU;
         default:
         return 0;
     }
@@ -47,7 +50,8 @@ GraphModelWrapper.prototype.setBackend = function(backend) {
     var be;
     switch (backend) {
         case this.AUTO:
-        be = typeof OffscreenCanvas !== 'undefined' ? "webgl" : "wasm";
+            console.log(navigator.gpu);
+        be = navigator.gpu ? "webgpu" : typeof OffscreenCanvas !== 'undefined' ? "webgl" : "wasm";
         break;
         case this.CPU:
         be = "cpu";
@@ -57,6 +61,9 @@ GraphModelWrapper.prototype.setBackend = function(backend) {
         break;
         case this.WASM:
         be = "wasm";
+        break;
+        case this.WEBGPU:
+        be = "webgpu";
         break;
         default:
         return;
@@ -162,10 +169,12 @@ GraphModelWrapper.prototype.getModelVersion = function() {
 };
 
 if (Module['ENVIRONMENT_IS_PTHREAD']) {
-    const version ="3.0.0"
+    //const version ="3.0.0";
+    const version ="4.2.0"
     importScripts(
         `//cdn.jsdelivr.net/npm/@tensorflow/tfjs@${version}/dist/tf.min.js`,
-        `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`    );
+        `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgpu@${version}/dist/tf-backend-webgpu.min.js`,
+        `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`);
     tf.wasm.setWasmPaths(`//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/`);
     if (typeof OffscreenCanvas !== 'undefined') {
         self.document = {
