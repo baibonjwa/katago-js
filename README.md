@@ -30,7 +30,7 @@ source em_build.sh
 
 ```sh
 cd web
-http-server . # or your favorite one liner server
+statikk --coi # or your favorite one liner server
 ```
 
 ### Open Browser
