@@ -496,6 +496,7 @@ if(USE_BACKEND STREQUAL "TFJS")
 
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s DEMANGLE_SUPPORT=1")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --pre-js ${CMAKE_SOURCE_DIR}/pre.js --js-library ${CMAKE_SOURCE_DIR}/tfjs_api.js")
+    set_target_properties(katago PROPERTIES LINK_DEPENDS "${CMAKE_SOURCE_DIR}/pre.js;${CMAKE_SOURCE_DIR}/tfjs_api.js")
 endif()
 
 target_include_directories(katago PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
