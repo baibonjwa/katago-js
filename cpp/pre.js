@@ -1,5 +1,3 @@
-// The reason why ES5 is https://github.com/emscripten-core/emscripten/issues/9190
-
 function loadJSON(url) {
     return new Promise(function(res, rej) {
         const request = new XMLHttpRequest();
@@ -19,122 +17,130 @@ function loadJSON(url) {
     });
 }
 
-var GraphModelWrapper = function() {
-    this.model = null;
-    // TODO - modelのメタデータ対応
-    this.version = 8;
-};
-
-GraphModelWrapper.prototype.AUTO = 0;
-GraphModelWrapper.prototype.CPU = 1;
-GraphModelWrapper.prototype.WEBGL = 2;
-GraphModelWrapper.prototype.WASM = 3;
-GraphModelWrapper.prototype.WEBGPU = 4;
-
-GraphModelWrapper.prototype.getBackend = function() {
-    switch (tf.getBackend()) {
-        case "cpu":
-        return this.CPU;
-        case "webgl":
-        return this.WEBGL;
-        case "wasm":
-        return this.WASM;
-        case "webgpu":
-        return this.WEBGPU;
-        default:
-        return 0;
+class GraphModelWrapper {
+    constructor() {
+        this.AUTO = 0;
+        this.CPU = 1;
+        this.WEBGL = 2;
+        this.WASM = 3;
+        this.WEBGPU = 4;
+        
+        this.device = null;
+        this.model = null;
+        // TODO - modelのメタデータ対応
+        this.version = 8;
     }
-}
 
-GraphModelWrapper.prototype.setBackend = function(backend) {
-    var be;
-    switch (backend) {
-        case this.AUTO:
-            console.log(navigator.gpu);
-        be = navigator.gpu ? "webgpu" : typeof OffscreenCanvas !== 'undefined' ? "webgl" : "wasm";
-        break;
-        case this.CPU:
-        be = "cpu";
-        break;
-        case this.WEBGL:
-        be = "webgl";
-        break;
-        case this.WASM:
-        be = "wasm";
-        break;
-        case this.WEBGPU:
-        be = "webgpu";
-        break;
-        default:
-        return;
+    getBackend() {
+        switch (tf.getBackend()) {
+            case "cpu":
+            return this.CPU;
+            case "webgl":
+            return this.WEBGL;
+            case "wasm":
+            return this.WASM;
+            case "webgpu":
+            return this.WEBGPU;
+            default:
+            return 0;
+        }
     }
-    return Asyncify.handleSleep(wakeUp => {
-        tf.setBackend(be).then(s => {
+
+    setBackend(backend) {
+        var be;
+        switch (backend) {
+            case this.AUTO:
+            be = navigator.gpu ? "webgpu" : typeof OffscreenCanvas !== 'undefined' ? "webgl" : "wasm";
+            break;
+            case this.CPU:
+            be = "cpu";
+            break;
+            case this.WEBGL:
+            be = "webgl";
+            break;
+            case this.WASM:
+            be = "wasm";
+            break;
+            case this.WEBGPU:
+            be = "webgpu";
+            break;
+            default:
+            return;
+        }
+        return Asyncify.handleSleep(async wakeUp => {
+            const s = await tf.setBackend(be);
             console.log("setBackend", be, s);
             if (s) {
+                if (be === "webgpu") {
+                    const adapter = await navigator.gpu.requestAdapter();
+                    this.device = await adapter.requestDevice();
+                }
                 wakeUp(1);
             } else if (backend === this.AUTO && be === "webgl") {
                 // OffscreenCanvasが存在してもsetBackendが失敗するケースがあるのでwasmにフォールバックさせる
                 console.log("try wasm for setBackend");
-                tf.setBackend("wasm").then(s => {
-                    wakeUp(s ? 1 : 0);
-                });
+                const s = await tf.setBackend("wasm");
+                wakeUp(s ? 1 : 0);
             } else {
                 wakeUp(0);
             }
         });
-    });
-};
+    }
 
-GraphModelWrapper.prototype.downloadMetadata = function(charp) {
-    return Asyncify.handleSleep((function(wakeUp) {
-        const model = UTF8ToString(charp);
-        loadJSON(model + "/metadata.json")
-            .then((function(json) {
+    downloadMetadata(charp) {
+        return Asyncify.handleSleep(async wakeUp => {
+            const model = UTF8ToString(charp);
+            try {
+                let json = await loadJSON(model + "/metadata.json");
                 this.version = json.version;
                 wakeUp(1);
-            }).bind(this))
-            .catch(function(error) {
-                console.log(error);
+            } catch (error) {
+                console.error(error);
                 wakeUp(0);
-            });
-    }).bind(this));
-};
-
-GraphModelWrapper.prototype.downloadModel = function(charp) {
-    return Asyncify.handleSleep((function(wakeUp) {
-        const model = UTF8ToString(charp);
-        tf.loadGraphModel(model + "/model.json")
-        .then((function(model) {
-            this.model = model;
-            wakeUp(1);
-        }).bind(this))
-        .catch(function(errors) {
-            console.log(errors);
-            wakeUp(0);
+            }
         });
-    }).bind(this));
-};
+    }
 
-GraphModelWrapper.prototype.removeModel = function() {
-    this.model = null;
-};
+    downloadModel(charp) {
+        return Asyncify.handleSleep(async wakeUp => {
+            const modelName = UTF8ToString(charp);
+            try {
+                let model = await tf.loadGraphModel(modelName + "/model.json");
+                this.model = model;
+                wakeUp(1);
+            } catch (errors) {
+                console.error(errors);
+                wakeUp(0);
+            }
+        });
+    }
 
-GraphModelWrapper.prototype.predict = function(
-    batches,
-    inputBuffer, boardWxH, inputBufferChannels,
-    inputGlobalBuffer, inputGlobalBufferChannels,
-    values, miscvalues, ownerships, policies) {
-    return Asyncify.handleSleep(function(wakeUp) {
-        try {
-            const bin_inputs = new Float32Array(Module.HEAPF32.buffer, inputBuffer, batches * boardWxH * inputBufferChannels);
-            const global_inputs = new Float32Array(Module.HEAPF32.buffer, inputGlobalBuffer, batches * inputGlobalBufferChannels);
-            const start = Date.now();
-            this.model.executeAsync({
-                "swa_model/bin_inputs": tf.tensor(bin_inputs, [batches, boardWxH, inputBufferChannels], 'float32'),
-                "swa_model/global_inputs": tf.tensor(global_inputs, [batches, inputGlobalBufferChannels], 'float32'),
-            }).then(function(results) {
-                // console.log("executeAsync", Date.now() - start);
+    removeModel() {
+        this.model = null;
+    }
+
+    predict(
+        batches,
+        inputBuffer, boardWxH, inputBufferChannels,
+        inputGlobalBuffer, inputGlobalBufferChannels,
+        values, miscvalues, ownerships, policies
+    ) {
+        return Asyncify.handleSleep(async wakeUp => {
+            try {
+                let bin_inputs;
+                let global_inputs;
+                if (this.getBackend() == this.WEBGPU) {
+                    bin_inputs = { buffer: device.createBuffer(batches * boardWxH * inputBufferChannels * 4) };
+                    global_inputs = { buffer: device.createBuffer(batches * inputGlobalBufferChannels * 4) };
+                } else {
+                    bin_inputs = new Float32Array(Module.HEAPF32.buffer, inputBuffer, batches * boardWxH * inputBufferChannels);
+                    global_inputs = new Float32Array(Module.HEAPF32.buffer, inputGlobalBuffer, batches * inputGlobalBufferChannels);
+                }
+                const start = Date.now();
+                let results = await this.model.executeAsync({
+                    "swa_model/bin_inputs": tf.tensor(bin_inputs, [batches, boardWxH, inputBufferChannels], 'float32'),
+                    "swa_model/global_inputs": tf.tensor(global_inputs, [batches, inputGlobalBufferChannels], 'float32'),
+                });
                 var i;
                 const miscvaluesSize = this.version === 8 ? 10 : 6;
                 for (i = 0; i < results.length; i++) {
@@ -156,26 +162,33 @@ GraphModelWrapper.prototype.predict = function(
                     }
                 }
                 wakeUp(1);
-            });
-        } catch (e) {
-            console.error(e);
-            wakeUp(0);
-        }
-    }.bind(this));
-};
+            } catch (e) {
+                console.error(e);
+                wakeUp(0);
+            }
+        });
+    }
 
-GraphModelWrapper.prototype.getModelVersion = function() {
-    return this.version;
-};
+    getModelVersion() {
+        return this.version;
+    }
+}
 
 if (Module['ENVIRONMENT_IS_PTHREAD']) {
+    if (true) {
+        importScripts(
+            `tf.min.js`,
+            `tf-backend-webgpu.min.js`,
+            `tf-backend-wasm.min.js`);
+    } else {
     //const version ="3.0.0";
     const version ="4.2.0"
-    importScripts(
-        `//cdn.jsdelivr.net/npm/@tensorflow/tfjs@${version}/dist/tf.min.js`,
-        `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgpu@${version}/dist/tf-backend-webgpu.min.js`,
-        `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`);
-    tf.wasm.setWasmPaths(`//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/`);
+        importScripts(
+            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs@${version}/dist/tf.min.js`,
+            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgpu@${version}/dist/tf-backend-webgpu.min.js`,
+            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`);
+        tf.wasm.setWasmPaths(`//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/`);
+    }
     if (typeof OffscreenCanvas !== 'undefined') {
         self.document = {
             createElement: function() {
