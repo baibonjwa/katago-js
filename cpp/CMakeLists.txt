@@ -485,18 +485,19 @@ if(USE_BACKEND STREQUAL "TFJS")
     #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s ASSERTIONS")
     #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s SAFE_HEAP=1")
 
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s ASYNCIFY=1 -s 'ASYNCIFY_IMPORTS=[\"emscripten_sleep\", \"setBackend\", \"downloadMetadata\", \"downloadModel\", \"waitForStdin\", \"predict\"]' -O3")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s ASYNCIFY=1 -s 'ASYNCIFY_IMPORTS=[\"emscripten_sleep\", \"setBackend\", \"downloadMetadata\", \"downloadModel\", \"waitForStdin\", \"predict\"]' -O3")
 
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s USE_PTHREADS=1") # You need wasm to use pthreads with latest-upstream.
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s USE_PTHREADS=1")
 
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s ALLOW_MEMORY_GROWTH=1 -s WASM_MEM_MAX=1999MB")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s ALLOW_MEMORY_GROWTH=1 -s WASM_MEM_MAX=1999MB")
 
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s DEMANGLE_SUPPORT=1")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --pre-js ${CMAKE_SOURCE_DIR}/pre.js --js-library ${CMAKE_SOURCE_DIR}/tfjs_api.js")
     set_target_properties(katago PROPERTIES LINK_DEPENDS "${CMAKE_SOURCE_DIR}/pre.js;${CMAKE_SOURCE_DIR}/tfjs_api.js")
+    # "Browser is not defined" https://github.com/emscripten-core/emscripten/issues/4291
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=$Browser")
 endif()
 
 target_include_directories(katago PUBLIC ${CMAKE_CURRENT_BINARY_DIR})

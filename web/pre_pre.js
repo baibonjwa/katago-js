@@ -98,6 +98,9 @@ if (typeof Module === "undefined") {
 if (!("preRun" in Module)) {
     Module["preRun"] = [];
 }
+if (!("arguments" in Module)) {
+    Module["arguments"] = [];
+}
 Module["preRun"].push(function() {
     const params = new URL(location).searchParams;
     const cfgFile = params.get("config") || "gtp_auto.cfg";

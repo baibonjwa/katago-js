@@ -362,6 +362,7 @@ void NeuralNet::getOutput(
     (int)inputBuffers->policyResults
   ) != 1) {
     cerr << "predict error " << endl;
+    exit(0);
   }
   cerr << "predict time(ms): " << static_cast<double>(clock() - start) / CLOCKS_PER_SEC * 1000.0 << endl;
   assert(!isnan(inputBuffers->valueResults[0]));
