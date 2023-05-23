@@ -50,7 +50,7 @@ class GraphModelWrapper {
         var be;
         switch (backend) {
             case this.AUTO:
-            be = navigator.gpu ? "webgpu" : typeof OffscreenCanvas !== 'undefined' ? "webgl" : "wasm";
+            be = typeof OffscreenCanvas !== 'undefined' ? "webgl" : "wasm";
             break;
             case this.CPU:
             be = "cpu";
@@ -127,15 +127,8 @@ class GraphModelWrapper {
     ) {
         return Asyncify.handleSleep(async wakeUp => {
             try {
-                let bin_inputs;
-                let global_inputs;
-                if (this.getBackend() == this.WEBGPU) {
-                    bin_inputs = { buffer: device.createBuffer(batches * boardWxH * inputBufferChannels * 4) };
-                    global_inputs = { buffer: device.createBuffer(batches * inputGlobalBufferChannels * 4) };
-                } else {
-                    bin_inputs = new Float32Array(Module.HEAPF32.buffer, inputBuffer, batches * boardWxH * inputBufferChannels);
-                    global_inputs = new Float32Array(Module.HEAPF32.buffer, inputGlobalBuffer, batches * inputGlobalBufferChannels);
-                }
+                let bin_inputs = new Float32Array(Module.HEAPF32.buffer, inputBuffer, batches * boardWxH * inputBufferChannels);
+                let global_inputs = new Float32Array(Module.HEAPF32.buffer, inputGlobalBuffer, batches * inputGlobalBufferChannels);
                 const start = Date.now();
                 let results = await this.model.executeAsync({
                     "swa_model/bin_inputs": tf.tensor(bin_inputs, [batches, boardWxH, inputBufferChannels], 'float32'),
@@ -175,17 +168,18 @@ class GraphModelWrapper {
 }
 
 if (Module['ENVIRONMENT_IS_PTHREAD']) {
-    if (true) {
+    if (location.protocol === "http:") {
         importScripts(
-            `tf.min.js`,
-            `tf-backend-webgpu.min.js`,
-            `tf-backend-wasm.min.js`);
+            "tf.min.js",
+            "tf-backend-cpu.min.js",
+            "tf-backend-webgl.min.js");
+            // wasmを使うにはmin.jsだけじゃなくwasmもローカルにコピーしないといけない
     } else {
-    //const version ="3.0.0";
-    const version ="4.2.0"
+        const version ="4.6.0";
         importScripts(
             `//cdn.jsdelivr.net/npm/@tensorflow/tfjs@${version}/dist/tf.min.js`,
-            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgpu@${version}/dist/tf-backend-webgpu.min.js`,
+            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu@${version}/dist/tf-backend-cpu.min.js`,
+            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@${version}/dist/tf-backend-webgl.min.js`,
             `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`);
         tf.wasm.setWasmPaths(`//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/`);
     }
