@@ -482,7 +482,6 @@ if(USE_BACKEND STREQUAL "TFJS")
     #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --source-map-base https://mimiaka-python.herokuapp.com/a_teacher_of_go/")
     #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-    #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s ASSERTIONS")
     #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -s SAFE_HEAP=1")
 
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
@@ -498,6 +497,7 @@ if(USE_BACKEND STREQUAL "TFJS")
     set_target_properties(katago PROPERTIES LINK_DEPENDS "${CMAKE_SOURCE_DIR}/pre.js;${CMAKE_SOURCE_DIR}/tfjs_api.js")
     # "Browser is not defined" https://github.com/emscripten-core/emscripten/issues/4291
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s DEFAULT_LIBRARY_FUNCS_TO_INCLUDE=$Browser")
+    #set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s ASSERTIONS=1") # エラーが出たとき、詳しくは-s ASSERTIONS=1を付けろと出力されるが、これをつけると動いていたものさえ動かなくなる
 endif()
 
 target_include_directories(katago PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
