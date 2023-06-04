@@ -34,6 +34,8 @@ struct ComputeContext {
         backend = 2;
       } else if(tfjsBackend == "wasm") {
         backend = 3;
+      } else if(tfjsBackend == "webgpu") {
+        backend = 4;
       }
     } else {
       logger->write("backend: auto");

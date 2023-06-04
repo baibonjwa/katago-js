@@ -1,3 +1,7 @@
+function isLocalTest() {
+    return location.protocol === "http:";
+}
+
 function loadJSON(url) {
     return new Promise(function(res, rej) {
         const request = new XMLHttpRequest();
@@ -50,7 +54,8 @@ class GraphModelWrapper {
         var be;
         switch (backend) {
             case this.AUTO:
-            be = typeof OffscreenCanvas !== 'undefined' ? "webgl" : "wasm";
+            console.log("pass");
+            be = typeof OffscreenCanvas !== 'undefined' ? "webgl" : isLocalTest() ? "cpu" : "wasm";
             break;
             case this.CPU:
             be = "cpu";
@@ -77,9 +82,10 @@ class GraphModelWrapper {
                 }
                 wakeUp(1);
             } else if (backend === this.AUTO && be === "webgl") {
-                // OffscreenCanvasが存在してもsetBackendが失敗するケースがあるのでwasmにフォールバックさせる
-                console.log("try wasm for setBackend");
-                const s = await tf.setBackend("wasm");
+                // OffscreenCanvasが存在してもsetBackendが失敗するケースがあるのでフォールバックさせる
+                const fallback = isLocalTest() ? "cpu" : "wasm";
+                console.log(`try ${fallback} for setBackend`);
+                const s = await tf.setBackend(fallback);
                 wakeUp(s ? 1 : 0);
             } else {
                 wakeUp(0);
@@ -168,11 +174,12 @@ class GraphModelWrapper {
 }
 
 if (Module['ENVIRONMENT_IS_PTHREAD']) {
-    if (location.protocol === "http:") {
+    if (isLocalTest()) {
         importScripts(
             "tf.min.js",
             "tf-backend-cpu.min.js",
-            "tf-backend-webgl.min.js");
+            "tf-backend-webgl.min.js",
+            "tf-backend-webgpu.min.js");
             // wasmを使うにはmin.jsだけじゃなくwasmもローカルにコピーしないといけない
     } else {
         const version ="4.6.0";
