@@ -54,8 +54,7 @@ class GraphModelWrapper {
         var be;
         switch (backend) {
             case this.AUTO:
-            console.log("pass");
-            be = typeof OffscreenCanvas !== 'undefined' ? "webgl" : isLocalTest() ? "cpu" : "wasm";
+            be = typeof OffscreenCanvas !== 'undefined' ? "webgl" : "wasm";
             break;
             case this.CPU:
             be = "cpu";
@@ -83,7 +82,7 @@ class GraphModelWrapper {
                 wakeUp(1);
             } else if (backend === this.AUTO && be === "webgl") {
                 // OffscreenCanvasが存在してもsetBackendが失敗するケースがあるのでフォールバックさせる
-                const fallback = isLocalTest() ? "cpu" : "wasm";
+                const fallback = "wasm";
                 console.log(`try ${fallback} for setBackend`);
                 const s = await tf.setBackend(fallback);
                 wakeUp(s ? 1 : 0);
@@ -176,18 +175,17 @@ class GraphModelWrapper {
 if (Module['ENVIRONMENT_IS_PTHREAD']) {
     if (isLocalTest()) {
         importScripts(
-            "tf.min.js",
-            "tf-backend-cpu.min.js",
-            "tf-backend-webgl.min.js",
-            "tf-backend-webgpu.min.js");
-            // wasmを使うにはmin.jsだけじゃなくwasmもローカルにコピーしないといけない
+            "tfjs/tf.min.js",
+            "tfjs/tf-backend-webgpu.min.js",
+            "tfjs/tf-backend-wasm.min.js"
+        );
+        tf.wasm.setWasmPaths("/tfjs/");
     } else {
         const version ="4.6.0";
         importScripts(
             `//cdn.jsdelivr.net/npm/@tensorflow/tfjs@${version}/dist/tf.min.js`,
-            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-cpu@${version}/dist/tf-backend-cpu.min.js`,
-            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@${version}/dist/tf-backend-webgl.min.js`,
-            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`);
+            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`
+        );
         tf.wasm.setWasmPaths(`//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/`);
     }
     if (typeof OffscreenCanvas !== 'undefined') {
