@@ -1,26 +1,15 @@
 #include "../command/commandline.h"
 
+#include "../core/fileutils.h"
 #include "../core/os.h"
+#include "../core/logger.h"
 #include "../dataio/homedata.h"
 #include "../program/setup.h"
 #include "../main.h"
 
-#include <ghc/filesystem.hpp>
-namespace gfs = ghc::filesystem;
-
 using namespace std;
 
 //--------------------------------------------------------------------------------------
-
-static bool doesPathExist(const string& path) {
-  try {
-    gfs::path gfsPath(path);
-    return gfs::exists(gfsPath);
-  }
-  catch(const gfs::filesystem_error&) {
-    return false;
-  }
-}
 
 static string getDefaultConfigPathForHelp(const string& defaultConfigFileName) {
   return HomeData::getDefaultFilesDirForHelpMessage() + "/" + defaultConfigFileName;
@@ -199,6 +188,12 @@ string KataGoCommandLine::defaultGtpConfigFileName() {
   return "default_gtp.cfg";
 }
 
+void KataGoCommandLine::parseArgs(const vector<string>& args) {
+  vector<string> mutableCopy = args;
+  // Call the underlying tclap parse(vector<string>&);
+  return parse(mutableCopy);
+}
+
 void KataGoCommandLine::setShortUsageArgLimit() {
   helpOutput->setShortUsageArgLimit((int)_argList.size() - numBuiltInArgs);
 }
@@ -217,22 +212,27 @@ void KataGoCommandLine::addModelFileArg() {
 
 //Empty string indicates no default
 void KataGoCommandLine::addConfigFileArg(const string& defaultCfgFileName, const string& exampleConfigFile) {
+  bool required = true;
+  if(!defaultCfgFileName.empty()) {
+    required = false;
+  }
+  addConfigFileArg(defaultCfgFileName, exampleConfigFile, required);
+}
+
+void KataGoCommandLine::addConfigFileArg(const string& defaultCfgFileName, const string& exampleConfigFile, bool required) {
   assert(configFileArg == NULL);
   defaultConfigFileName = defaultCfgFileName;
 
-  string helpDesc = "Config file to use";
-  bool required = true;
+  string helpDesc = "Config file(s) to use, can be one or multiple files";
   if(!exampleConfigFile.empty())
     helpDesc += " (see " + exampleConfigFile + " or configs/" + exampleConfigFile + ")";
   helpDesc += ".";
   if(!defaultConfigFileName.empty()) {
     helpDesc += " Defaults to: " + getDefaultConfigPathForHelp(defaultConfigFileName);
-    required = false;
   }
   //We don't apply the default directly here, but rather in getConfig(). It's more robust if we don't attempt any
   //filesystem access (which could fail) before we've even constructed the command arguments and help.
-  string defaultPath = "";
-  configFileArg = new TCLAP::ValueArg<string>("","config",helpDesc,required,defaultPath,"FILE");
+  configFileArg = new TCLAP::MultiArg<string>("","config",helpDesc,required,"FILE");
   this->add(*configFileArg);
 }
 
@@ -255,7 +255,7 @@ string KataGoCommandLine::getModelFile() const {
       if(paths.size() > 0)
         pathForErrMsg = paths[0];
       for(const string& path: paths)
-        if(doesPathExist(path))
+        if(FileUtils::exists(path))
           return path;
     }
     catch(const StringError& err) {
@@ -272,19 +272,19 @@ bool KataGoCommandLine::modelFileIsDefault() const {
   return modelFileArg->getValue().empty();
 }
 
-string KataGoCommandLine::getConfigFile() const {
+vector<string> KataGoCommandLine::getConfigFiles() const {
   assert(configFileArg != NULL);
-  string configFile = configFileArg->getValue();
+  vector<string> configFiles = configFileArg->getValue();
   #if !defined(__EMSCRIPTEN__)
-  if(configFile.empty() && !defaultConfigFileName.empty()) {
+  if(configFiles.empty() && !defaultConfigFileName.empty()) {
     string pathForErrMsg;
     try {
       vector<string> paths = getDefaultConfigPaths(defaultConfigFileName);
       if(paths.size() > 0)
         pathForErrMsg = paths[0];
       for(const string& path: paths)
-        if(doesPathExist(path))
-          return path;
+        if(FileUtils::exists(path))
+          return { path };
     }
     catch(const StringError& err) {
       throw StringError(string("'-config CONFIG_FILE_NAME.cfg was not provided but encountered error searching for default: ") + err.what());
@@ -294,7 +294,7 @@ string KataGoCommandLine::getConfigFile() const {
     throw StringError("-config CONFIG_FILE_NAME.cfg was not specified to tell KataGo where to find the config, and default was not found at " + pathForErrMsg);
   }
   #endif
-  return configFile;
+  return configFiles;
 }
 
 void KataGoCommandLine::maybeApplyOverrideConfigArg(ConfigParser& cfg) const {
@@ -311,10 +311,31 @@ void KataGoCommandLine::maybeApplyOverrideConfigArg(ConfigParser& cfg) const {
   }
 }
 
+void KataGoCommandLine::logOverrides(Logger& logger) const {
+  if(overrideConfigArg != NULL) {
+    vector<string> overrideConfigs = overrideConfigArg->getValue();
+    for(const string& overrideConfig : overrideConfigs) {
+      if(overrideConfig != "") {
+        map<string,string> newkvs = ConfigParser::parseCommaSeparated(overrideConfig);
+        for(const auto& x: newkvs) {
+          logger.write("Config override: " + x.first + " = " + x.second);
+        }
+      }
+    }
+  }
+}
+
 //cfg must be uninitialized, this will initialize it based on user-provided arguments
 void KataGoCommandLine::getConfig(ConfigParser& cfg) const {
-  string configFile = getConfigFile();
-  cfg.initialize(configFile);
+  vector<string> configFiles = getConfigFiles();
+  assert(!configFiles.empty());
+  cfg.initialize(configFiles[0]);
+  if(configFiles.size() > 1) {
+    configFiles.erase(configFiles.begin());
+    for(const string& overrideFile : configFiles) {
+      cfg.overrideKeys(overrideFile);
+    }
+  }
   maybeApplyOverrideConfigArg(cfg);
 }
 

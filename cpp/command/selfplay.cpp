@@ -1,5 +1,6 @@
 #include "../core/global.h"
 #include "../core/datetime.h"
+#include "../core/fileutils.h"
 #include "../core/makedir.h"
 #include "../core/config_parser.h"
 #include "../dataio/sgf.h"
@@ -31,7 +32,7 @@ static void signalHandler(int signal)
 //-----------------------------------------------------------------------------------------
 
 
-int MainCmds::selfplay(int argc, const char* const* argv) {
+int MainCmds::selfplay(const vector<string>& args) {
   Board::initHash();
   ScoreValue::initTables();
   Rand seedRand;
@@ -43,6 +44,7 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
   try {
     KataGoCommandLine cmd("Generate training data via self play.");
     cmd.addConfigFileArg("","");
+    cmd.addOverrideConfigArg();
 
     TCLAP::ValueArg<string> modelsDirArg("","models-dir","Dir to poll and load models from",true,string(),"DIR");
     TCLAP::ValueArg<string> outputDirArg("","output-dir","Dir to output files",true,string(),"DIR");
@@ -50,7 +52,7 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
     cmd.add(modelsDirArg);
     cmd.add(outputDirArg);
     cmd.add(maxGamesTotalArg);
-    cmd.parse(argc,argv);
+    cmd.parseArgs(args);
 
     modelsDir = modelsDirArg.getValue();
     outputDir = outputDirArg.getValue();
@@ -78,11 +80,9 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
   MakeDir::make(outputDir);
   MakeDir::make(modelsDir);
 
-  Logger logger;
+  Logger logger(&cfg);
   //Log to random file name to better support starting/stopping as well as multiple parallel runs
   logger.addFile(outputDir + "/log" + DateTime::getCompactDateTimeString() + "-" + Global::uint64ToHexString(seedRand.nextUInt64()) + ".log");
-  bool logToStdout = cfg.getBool("logToStdout");
-  logger.setLogToStdout(logToStdout);
 
   logger.write("Self Play Engine starting...");
   logger.write(string("Git revision: ") + Version::getGitRevision());
@@ -92,7 +92,7 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
   const string gameSeedBase = Global::uint64ToHexString(seedRand.nextUInt64());
 
   //Width and height of the board to use when writing data, typically 19
-  const int dataBoardLen = cfg.getInt("dataBoardLen",9,37);
+  const int dataBoardLen = cfg.getInt("dataBoardLen",3,37);
   const int inputsVersion =
     cfg.contains("inputsVersion") ?
     cfg.getInt("inputsVersion",0,10000) :
@@ -100,27 +100,31 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
   //Max number of games that we will allow to be queued up and not written out
   const int maxDataQueueSize = cfg.getInt("maxDataQueueSize",1,1000000);
   const int maxRowsPerTrainFile = cfg.getInt("maxRowsPerTrainFile",1,100000000);
-  const int maxRowsPerValFile = cfg.getInt("maxRowsPerValFile",1,100000000);
   const double firstFileRandMinProp = cfg.getDouble("firstFileRandMinProp",0.0,1.0);
 
-  const double validationProp = cfg.getDouble("validationProp",0.0,0.5);
   const int64_t logGamesEvery = cfg.getInt64("logGamesEvery",1,1000000);
 
   const bool switchNetsMidGame = cfg.getBool("switchNetsMidGame");
   const SearchParams baseParams = Setup::loadSingleParams(cfg,Setup::SETUP_FOR_OTHER);
 
   //Initialize object for randomizing game settings and running games
-  PlaySettings playSettings = PlaySettings::loadForSelfplay(cfg);
+  const bool isDistributed = false;
+  PlaySettings playSettings = PlaySettings::loadForSelfplay(cfg, isDistributed);
   GameRunner* gameRunner = new GameRunner(cfg, playSettings, logger);
   bool autoCleanupAllButLatestIfUnused = true;
-  SelfplayManager* manager = new SelfplayManager(validationProp, maxDataQueueSize, &logger, logGamesEvery, autoCleanupAllButLatestIfUnused);
+  SelfplayManager* manager = new SelfplayManager(maxDataQueueSize, &logger, logGamesEvery, autoCleanupAllButLatestIfUnused);
+
+  const int minBoardXSizeUsed = gameRunner->getGameInitializer()->getMinBoardXSize();
+  const int minBoardYSizeUsed = gameRunner->getGameInitializer()->getMinBoardYSize();
+  const int maxBoardXSizeUsed = gameRunner->getGameInitializer()->getMaxBoardXSize();
+  const int maxBoardYSizeUsed = gameRunner->getGameInitializer()->getMaxBoardYSize();
 
   Setup::initializeSession(cfg);
 
   //Done loading!
   //------------------------------------------------------------------------------------
   logger.write("Loaded all config stuff, starting self play");
-  if(!logToStdout)
+  if(!logger.isLoggingToStdout())
     cout << "Loaded all config stuff, starting self play" << endl;
 
   if(!std::atomic_is_lock_free(&shouldStop))
@@ -131,8 +135,9 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
 
   //Returns true if a new net was loaded.
   auto loadLatestNeuralNetIntoManager =
-    [inputsVersion,&manager,maxRowsPerTrainFile,maxRowsPerValFile,firstFileRandMinProp,dataBoardLen,
-     &modelsDir,&outputDir,&logger,&cfg,numGameThreads](const string* lastNetName) -> bool {
+    [inputsVersion,&manager,maxRowsPerTrainFile,firstFileRandMinProp,dataBoardLen,
+     &modelsDir,&outputDir,&logger,&cfg,numGameThreads,
+     minBoardXSizeUsed,maxBoardXSizeUsed,minBoardYSizeUsed,maxBoardYSizeUsed](const string* lastNetName) -> bool {
 
     string modelName;
     string modelFile;
@@ -143,19 +148,23 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
     //No new neural nets yet
     if(!foundModel || (lastNetName != NULL && *lastNetName == modelName))
       return false;
+    if(modelName == "random" && lastNetName != NULL && *lastNetName != "random") {
+      logger.write("WARNING: " + *lastNetName + " was the previous model, but now no model was found. Continuing with prev model instead of using random");
+      return false;
+    }
 
     logger.write("Found new neural net " + modelName);
 
-    // * 2 + 16 just in case to have plenty of room
-    int maxConcurrentEvals = cfg.getInt("numSearchThreads") * numGameThreads * 2 + 16;
-    int expectedConcurrentEvals = cfg.getInt("numSearchThreads") * numGameThreads;
-    int defaultMaxBatchSize = -1;
+    const int expectedConcurrentEvals = cfg.getInt("numSearchThreads") * numGameThreads;
+    const bool defaultRequireExactNNLen = minBoardXSizeUsed == maxBoardXSizeUsed && minBoardYSizeUsed == maxBoardYSizeUsed;
+    const int defaultMaxBatchSize = -1;
+    const bool disableFP16 = false;
+    const string expectedSha256 = "";
 
     Rand rand;
-    string expectedSha256 = "";
-    NNEvaluator* nnEval = Setup::initializeNNEvaluator(
-      modelName,modelFile,expectedSha256,cfg,logger,rand,maxConcurrentEvals,expectedConcurrentEvals,
-      NNPos::MAX_BOARD_LEN,NNPos::MAX_BOARD_LEN,defaultMaxBatchSize,
+     NNEvaluator* nnEval = Setup::initializeNNEvaluator(
+      modelName,modelFile,expectedSha256,cfg,logger,rand,expectedConcurrentEvals,
+      maxBoardXSizeUsed,maxBoardYSizeUsed,defaultMaxBatchSize,defaultRequireExactNNLen,disableFP16,
       Setup::SETUP_FOR_OTHER
     );
     logger.write("Loaded latest neural net " + modelName + " from: " + modelFile);
@@ -163,7 +172,6 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
     string modelOutputDir = outputDir + "/" + modelName;
     string sgfOutputDir = modelOutputDir + "/sgfs";
     string tdataOutputDir = modelOutputDir + "/tdata";
-    string vdataOutputDir = modelOutputDir + "/vdata";
 
     //Try repeatedly to make directories, in case the filesystem is unhappy with us as we try to make the same dirs as another process.
     //Wait a random amount of time in between each failure.
@@ -174,7 +182,6 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
         MakeDir::make(modelOutputDir);
         MakeDir::make(sgfOutputDir);
         MakeDir::make(tdataOutputDir);
-        MakeDir::make(vdataOutputDir);
         success = true;
       }
       catch(const StringError& e) {
@@ -197,7 +204,8 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
     }
 
     {
-      ofstream out(modelOutputDir + "/" + "selfplay-" + Global::uint64ToHexString(rand.nextUInt64()) + ".cfg");
+      ofstream out;
+      FileUtils::open(out,modelOutputDir + "/" + "selfplay-" + Global::uint64ToHexString(rand.nextUInt64()) + ".cfg");
       out << cfg.getContents();
       out.close();
     }
@@ -206,12 +214,14 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
     //simply controls the input feature version for the written data
     TrainingDataWriter* tdataWriter = new TrainingDataWriter(
       tdataOutputDir, inputsVersion, maxRowsPerTrainFile, firstFileRandMinProp, dataBoardLen, dataBoardLen, Global::uint64ToHexString(rand.nextUInt64()));
-    TrainingDataWriter* vdataWriter = new TrainingDataWriter(
-      vdataOutputDir, inputsVersion, maxRowsPerValFile, firstFileRandMinProp, dataBoardLen, dataBoardLen, Global::uint64ToHexString(rand.nextUInt64()));
-    ofstream* sgfOut = sgfOutputDir.length() > 0 ? (new ofstream(sgfOutputDir + "/" + Global::uint64ToHexString(rand.nextUInt64()) + ".sgfs")) : NULL;
+    ofstream* sgfOut = NULL;
+    if(sgfOutputDir.length() > 0) {
+      sgfOut = new ofstream();
+      FileUtils::open(*sgfOut, sgfOutputDir + "/" + Global::uint64ToHexString(rand.nextUInt64()) + ".sgfs");
+    }
 
     logger.write("Model loading loop thread loaded new neural net " + nnEval->getModelName());
-    manager->loadModelAndStartDataWriting(nnEval, tdataWriter, vdataWriter, sgfOut);
+    manager->loadModelAndStartDataWriting(nnEval, tdataWriter, sgfOut);
     return true;
   };
 
@@ -239,7 +249,10 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
     &baseParams,
     &gameSeedBase
   ](int threadIdx) {
-    vector<std::atomic<bool>*> stopConditions = {&shouldStop};
+    auto shouldStopFunc = []() {
+      return shouldStop.load();
+    };
+    WaitableFlag* shouldPause = nullptr;
 
     string prevModelName;
     Rand thisLoopSeedRand;
@@ -285,13 +298,15 @@ int MainCmds::selfplay(int argc, const char* const* argv) {
         string seed = gameSeedBase + ":" + Global::uint64ToHexString(thisLoopSeedRand.nextUInt64());
         gameData = gameRunner->runGame(
           seed, botSpecB, botSpecW, forkData, NULL, logger,
-          stopConditions,
+          shouldStopFunc,
+          shouldPause,
           (switchNetsMidGame ? checkForNewNNEval : nullptr),
-          nullptr, false
+          nullptr,
+          nullptr
         );
       }
 
-      //NULL gamedata will happen when the game is interrupted by stopConditions, which means we should also stop.
+      //NULL gamedata will happen when the game is interrupted by shouldStop, which means we should also stop.
       //Or when we run out of total games.
       bool shouldContinue = gameData != NULL;
       //Note that if we've gotten a newNNEval, we're actually pushing the game as data for the new one, rather than the old one!

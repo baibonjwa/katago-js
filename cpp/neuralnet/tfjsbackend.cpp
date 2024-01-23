@@ -66,20 +66,20 @@ struct LoadedModel {
     */
     name = fileName;
     if (downloadMetadata((int)name.c_str()) == 1) {
-      modelDesc.version = jsGetModelVersion();
-      if (modelDesc.version >= 9) {
+      modelDesc.modelVersion = jsGetModelVersion();
+      if (modelDesc.modelVersion >= 9) {
         modelDesc.numInputChannels = 22;
         modelDesc.numInputGlobalChannels = 19;
         modelDesc.numValueChannels = 3;
         modelDesc.numOwnershipChannels = 1;
         modelDesc.numScoreValueChannels = 6;
-      } else if (modelDesc.version == 8) {
+      } else if (modelDesc.modelVersion == 8) {
         modelDesc.numInputChannels = 22;
         modelDesc.numInputGlobalChannels = 19;
         modelDesc.numValueChannels = 3;
         modelDesc.numOwnershipChannels = 1;
         modelDesc.numScoreValueChannels = 4;
-      } else if (modelDesc.version == 5) {
+      } else if (modelDesc.modelVersion == 5) {
         modelDesc.numInputChannels = 22;
         modelDesc.numInputGlobalChannels = 14;
         modelDesc.numValueChannels = 3;
@@ -163,8 +163,8 @@ struct InputBuffers {
     singleOwnershipResultElts = (size_t)m.numOwnershipChannels * xSize * ySize;
     singleOwnershipResultBytes = (size_t)m.numOwnershipChannels * xSize * ySize * sizeof(float);
 
-    assert(NNModelVersion::getNumSpatialFeatures(m.version) == m.numInputChannels);
-    assert(NNModelVersion::getNumGlobalFeatures(m.version) == m.numInputGlobalChannels);
+    assert(NNModelVersion::getNumSpatialFeatures(m.modelVersion) == m.numInputChannels);
+    assert(NNModelVersion::getNumGlobalFeatures(m.modelVersion) == m.numInputGlobalChannels);
 
     userInputBufferBytes = (size_t)m.numInputChannels * maxBatchSize * xSize * ySize * sizeof(float);
     userInputGlobalBufferBytes = (size_t)m.numInputGlobalChannels * maxBatchSize * sizeof(float);
@@ -239,6 +239,10 @@ int NeuralNet::getModelVersion(const LoadedModel* loadedModel) {
 
 Rules NeuralNet::getSupportedRules(const LoadedModel* loadedModel, const Rules& desiredRules, bool& supported) {
   return loadedModel->modelDesc.getSupportedRules(desiredRules, supported);
+}
+
+ModelPostProcessParams NeuralNet::getPostProcessParams(const LoadedModel* loadedModel) {
+  return loadedModel->modelDesc.postProcessParams;
 }
 
 ComputeHandle* NeuralNet::createComputeHandle(
@@ -334,7 +338,7 @@ void NeuralNet::getOutput(
   int batchSize = numBatchEltsFilled;
   int nnXLen = gpuHandle->nnXLen;
   int nnYLen = gpuHandle->nnYLen;
-  int version = gpuHandle->model->modelDesc.version;
+  int version = gpuHandle->model->modelDesc.modelVersion;
 
   int numSpatialFeatures = NNModelVersion::getNumSpatialFeatures(version);
   int numGlobalFeatures = NNModelVersion::getNumGlobalFeatures(version);

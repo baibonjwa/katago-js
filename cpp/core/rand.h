@@ -108,12 +108,19 @@ class Rand
 
   //Returns a normally distributed double with mean 0 stdev 1
   double nextGaussian();
+  //Truncated refers to the probability distribution, not the sample
+  //So on falling outside the range, we redraw, rather than capping.
+  double nextGaussianTruncated(double bound);
   //Returns an exponentially distributed double with mean 1.
   double nextExponential();
   //Returns a logistically distributed double with mean 0 and scale 1 (cdf = 1/(1+exp(-x)))
   double nextLogistic();
   //Returns a gamma distributed double with shape a and scale 1
   double nextGamma(double a);
+
+  //OTHER------------------------------------------------
+  // Fills buf[0] through buf[n-1] with a random permutation of the integers from 0 to n-1 inclusive.
+  void fillShuffledUIntRange(size_t n, uint32_t* buf);
 
   //TESTING----------------------------------------------
   static void runTests();
@@ -206,7 +213,7 @@ inline uint32_t Rand::nextUInt(const double* relProbs, size_t n)
 {
   assert(n > 0);
   assert(n < 0xFFFFFFFF);
-  double_t sum = 0;
+  double sum = 0;
   for(uint32_t i = 0; i<n; i++)
   {
     assert(relProbs[i] >= 0);
@@ -278,6 +285,15 @@ inline double Rand::nextGaussian()
     hasGaussian = true;
     return v1 * multiplier;
   }
+}
+
+inline double Rand::nextGaussianTruncated(double bound)
+{
+  assert(bound >= 0.1);
+  double d = nextGaussian();
+  while(d < -bound || d > bound)
+    d = nextGaussian();
+  return d;
 }
 
 inline double Rand::nextExponential()

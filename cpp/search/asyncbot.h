@@ -29,13 +29,17 @@ class AsyncBot {
   //Setup, same as in search.h
   //Calling any of these will stop any ongoing search, waiting for a full stop.
   void setPosition(Player pla, const Board& board, const BoardHistory& history);
+  void setPlayerAndClearHistory(Player pla);
+  void setPlayerIfNew(Player pla);
   void setKomiIfNew(float newKomi);
   void setRootHintLoc(Loc loc);
   void setAvoidMoveUntilByLoc(const std::vector<int>& bVec, const std::vector<int>& wVec);
+  void setAvoidMoveUntilRescaleRoot(bool b);
   void setAlwaysIncludeOwnerMap(bool b);
   void setParams(SearchParams params);
   void setParamsNoClearing(SearchParams params);
-  void setPlayerIfNew(Player movePla);
+  void setExternalPatternBonusTable(std::unique_ptr<PatternBonusTable>&& table);
+  void setCopyOfExternalPatternBonusTable(const std::unique_ptr<PatternBonusTable>& table);
   void clearSearch();
 
   //Updates position and preserves the relevant subtree of search
@@ -66,24 +70,50 @@ class AsyncBot {
   void ponder(double searchFactor);
 
   //Terminate any existing searches, and then begin pondering while periodically calling the specified callback
-  void analyzeAsync(Player movePla, double searchFactor, double callbackPeriod, const std::function<void(const Search* search)>& callback);
+  void analyzeAsync(
+    Player movePla,
+    double searchFactor,
+    double callbackPeriod,
+    double firstCallbackAfter,
+    const std::function<void(const Search* search)>& callback
+  );
   //Same as genMove but with periodic analyze callbacks
   void genMoveAsyncAnalyze(
-    Player movePla, int searchId, const TimeControls& tc, double searchFactor, const std::function<void(Loc,int)>& onMove,
-    double callbackPeriod, const std::function<void(const Search* search)>& callback
+    Player movePla,
+    int searchId,
+    const TimeControls& tc,
+    double searchFactor,
+    const std::function<void(Loc,int)>& onMove,
+    double callbackPeriod,
+    double firstCallbackAfter,
+    const std::function<void(const Search* search)>& callback
   );
   void genMoveAsyncAnalyze(
-    Player movePla, int searchId, const TimeControls& tc, double searchFactor, const std::function<void(Loc,int)>& onMove,
-    double callbackPeriod, const std::function<void(const Search* search)>& callback,
+    Player movePla,
+    int searchId,
+    const TimeControls& tc,
+    double searchFactor,
+    const std::function<void(Loc,int)>& onMove,
+    double callbackPeriod,
+    double firstCallbackAfter,
+    const std::function<void(const Search* search)>& callback,
     const std::function<void()>& onSearchBegun
   );
   Loc genMoveSynchronousAnalyze(
-    Player movePla, const TimeControls& tc, double searchFactor,
-    double callbackPeriod, const std::function<void(const Search* search)>& callback
+    Player movePla,
+    const TimeControls& tc,
+    double searchFactor,
+    double callbackPeriod,
+    double firstCallbackAfter,
+    const std::function<void(const Search* search)>& callback
   );
   Loc genMoveSynchronousAnalyze(
-    Player movePla, const TimeControls& tc, double searchFactor,
-    double callbackPeriod, const std::function<void(const Search* search)>& callback,
+    Player movePla,
+    const TimeControls& tc,
+    double searchFactor,
+    double callbackPeriod,
+    double firstCallbackAfter,
+    const std::function<void(const Search* search)>& callback,
     const std::function<void()>& onSearchBegun
   );
 
@@ -99,7 +129,6 @@ class AsyncBot {
 
  private:
   Search* search;
-  Logger* logger;
 
   std::mutex controlMutex;
   std::condition_variable threadWaitingToSearch;
@@ -115,6 +144,7 @@ class AsyncBot {
   TimeControls timeControls;
   double searchFactor;
   double analyzeCallbackPeriod;
+  double analyzeFirstCallbackAfter;
   std::function<void(const Search* search)> analyzeCallback;
   std::function<void()> searchBegunCallback;
 

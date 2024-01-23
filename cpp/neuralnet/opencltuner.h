@@ -71,6 +71,26 @@ namespace OpenCLParams {
     bool isSimple() const;
   };
 
+  struct HGemmWmmaNCHWParams {
+    int MWG = 16;
+    int NWG = 16;
+    int KWG = 16;
+    int MWAVE = 16;
+    int NWAVE = 16;
+    int MWARP = 16;
+    int NWARP = 16;
+    int VWM = 1;
+    int VWN = 2;
+    int SB = 0;
+
+    std::string desc() const;
+    std::string compileOptions() const;
+    int getRequiredCDivisor() const; // Use of HGemmWmmaNCHW on a matrix mult requires that input and output C is divisble by this
+    void fillFromDesc(const std::string& fileName, const std::string& desc);
+    bool isValid() const;
+    bool isSimple() const;
+  };
+
   struct Conv3x3Params {
     //Winograd input and output tile sizes
     int INTILE_XSIZE = 4;
@@ -131,11 +151,18 @@ struct OpenCLTuneParams {
   OpenCLParams::XGemmDirectParams xGemmDirect = OpenCLParams::XGemmDirectParams();
   OpenCLParams::XGemmParams xGemm = OpenCLParams::XGemmParams();
 
+  bool canUseFP16Storage = false;
+  bool canUseFP16Compute = false;
+  bool canUseFP16TensorCores = false;
+  bool canUseFP16TensorCoresFor1x1 = false;
+
   bool shouldUseFP16Storage = false;
   bool shouldUseFP16Compute = false;
   OpenCLParams::XGemmParams xGemm16 = OpenCLParams::XGemmParams();
   bool shouldUseFP16TensorCores = false;
+  bool shouldUseFP16TensorCoresFor1x1 = false;
   OpenCLParams::HGemmWmmaParams hGemmWmma = OpenCLParams::HGemmWmmaParams();
+  OpenCLParams::HGemmWmmaNCHWParams hGemmWmmaNCHW = OpenCLParams::HGemmWmmaNCHWParams();
 
   OpenCLParams::Conv3x3Params conv3x3 = OpenCLParams::Conv3x3Params();
   OpenCLParams::Conv5x5Params conv5x5 = OpenCLParams::Conv5x5Params();
@@ -155,11 +182,24 @@ struct OpenCLTuneParams {
 namespace OpenCLTuner {
   constexpr int DEFAULT_X_SIZE = NNPos::MAX_BOARD_LEN;
   constexpr int DEFAULT_Y_SIZE = NNPos::MAX_BOARD_LEN;
-  constexpr int DEFAULT_BATCH_SIZE = 2;
+  constexpr int DEFAULT_BATCH_SIZE = 4;
   constexpr int DEFAULT_WINOGRAD_3X3_TILE_SIZE = 4;
+
+  struct ModelInfoForTuning {
+    int maxConvChannels1x1;
+    int maxConvChannels3x3;
+    int trunkNumChannels;
+    int midNumChannels;
+    int regularNumChannels;
+    int gpoolNumChannels;
+    int modelVersion;
+
+    static ModelInfoForTuning ofDesc(const ModelDesc* desc);
+  };
 
   void tune(
     const OpenCLTuneParams& initialConfig,
+    const std::vector<DeviceInfo>& allDeviceInfos,
     DevicesContext& devicesContext,
     int gpuIdx,
     int batchSize,
@@ -169,9 +209,10 @@ namespace OpenCLTuner {
     enabled_t testFP16StorageMode,
     enabled_t testFP16ComputeMode,
     enabled_t testFP16TensorCoresMode,
-    const ModelDesc* model,
+    ModelInfoForTuning modelInfo,
     bool full,
     int winograd3x3TileSize,
+    Logger* logger,
     std::ostream& out,
     bool verboseErrors,
     bool verboseTuner,
@@ -179,7 +220,8 @@ namespace OpenCLTuner {
   );
 
   std::string defaultDirectory(bool makeDir, const std::string& homeDataDirOverride);
-  std::string defaultFileName(const std::string& gpuName, int nnXLen, int nnYLen, const ModelDesc* model);
+  std::string defaultFileName(const std::string& gpuName, int nnXLen, int nnYLen, int trunkNumChannels, int modelVersion);
+  std::string defaultFileName(const std::string& gpuName, int nnXLen, int nnYLen, ModelInfoForTuning modelInfo);
 
   OpenCLTuneParams loadOrAutoTune(
     std::string openCLTunerFile,
@@ -194,7 +236,15 @@ namespace OpenCLTuner {
     enabled_t testFP16StorageMode,
     enabled_t testFP16ComputeMode,
     enabled_t testFP16TensorCoresMode,
-    const ModelDesc* model,
+    ModelInfoForTuning modelInfo,
+    bool full
+  );
+
+  void autoTuneEverything(
+    const std::string& homeDataDirOverride,
+    int gpuIdxForTuning,
+    Logger* logger,
+    enabled_t useFP16Mode,
     bool full
   );
 

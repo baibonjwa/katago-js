@@ -17,10 +17,13 @@ namespace NNPos {
   constexpr int MAX_NN_POLICY_SIZE = MAX_BOARD_AREA + 1;
   //Extra score distribution radius, used for writing score in data rows and for the neural net score belief output
   constexpr int EXTRA_SCORE_DISTR_RADIUS = 60;
+  //Used various places we clip komi beyond board area.
+  constexpr float KOMI_CLIP_RADIUS = 20.0f;
 
   int xyToPos(int x, int y, int nnXLen);
   int locToPos(Loc loc, int boardXSize, int nnXLen, int nnYLen);
   Loc posToLoc(int pos, int boardXSize, int boardYSize, int nnXLen, int nnYLen);
+  int getPassPos(int nnXLen, int nnYLen);
   bool isPassPos(int pos, int nnXLen, int nnYLen);
   int getPolicySize(int nnXLen, int nnYLen);
 }
@@ -28,24 +31,28 @@ namespace NNPos {
 namespace NNInputs {
   constexpr int SYMMETRY_NOTSPECIFIED = -1;
   constexpr int SYMMETRY_ALL = -2;
-
-  constexpr int NUM_SYMMETRY_BOOLS = 3;
-  constexpr int NUM_SYMMETRY_COMBINATIONS = 8;
 }
 
 struct MiscNNInputParams {
   double drawEquivalentWinsForWhite = 0.5;
-  bool conservativePass = false;
+  bool conservativePassAndIsRoot = false;
+  bool enablePassingHacks = false;
   double playoutDoublingAdvantage = 0.0;
   float nnPolicyTemperature = 1.0f;
   bool avoidMYTDaggerHack = false;
   // If no symmetry is specified, it will use default or random based on config, unless node is already cached.
   int symmetry = NNInputs::SYMMETRY_NOTSPECIFIED;
+  double policyOptimism = 0.0;
+  int maxHistory = 1000;
 
   static const Hash128 ZOBRIST_CONSERVATIVE_PASS;
+  static const Hash128 ZOBRIST_FRIENDLY_PASS;
+  static const Hash128 ZOBRIST_PASSING_HACKS;
   static const Hash128 ZOBRIST_PLAYOUT_DOUBLINGS;
   static const Hash128 ZOBRIST_NN_POLICY_TEMP;
   static const Hash128 ZOBRIST_AVOID_MYTDAGGER_HACK;
+  static const Hash128 ZOBRIST_POLICY_OPTIMISM;
+  static const Hash128 ZOBRIST_ZERO_HISTORY;
 };
 
 namespace NNInputs {
@@ -125,6 +132,8 @@ struct NNOutput {
   //Indexed by pos rather than loc
   //Values in here will be set to negative for illegal moves, including superko
   float policyProbs[NNPos::MAX_NN_POLICY_SIZE];
+  //The optimism value used for this neural net evaluation.
+  float policyOptimismUsed;
 
   int nnXLen;
   int nnYLen;
@@ -145,12 +154,61 @@ struct NNOutput {
   NNOutput& operator=(const NNOutput&);
 
   inline float* getPolicyProbsMaybeNoised() { return noisedPolicyProbs != NULL ? noisedPolicyProbs : policyProbs; }
+  inline const float* getPolicyProbsMaybeNoised() const { return noisedPolicyProbs != NULL ? noisedPolicyProbs : policyProbs; }
   void debugPrint(std::ostream& out, const Board& board);
+  inline int getPos(Loc loc, const Board& board) const { return NNPos::locToPos(loc, board.x_size, nnXLen, nnYLen ); }
 };
 
 namespace SymmetryHelpers {
+  //A symmetry is 3 bits flipY(bit 0), flipX(bit 1), transpose(bit 2). They are applied in that order.
+  //The first four symmetries only reflect, and do not transpose X and Y.
+  constexpr int NUM_SYMMETRIES = 8;
+  constexpr int NUM_SYMMETRIES_WITHOUT_TRANSPOSE = 4;
+
+  //These two IGNORE transpose if hSize and wSize do not match. So non-square transposes are disallowed.
+  //copyOutputsWithSymmetry performs the inverse of symmetry.
   void copyInputsWithSymmetry(const float* src, float* dst, int nSize, int hSize, int wSize, int cSize, bool useNHWC, int symmetry);
   void copyOutputsWithSymmetry(const float* src, float* dst, int nSize, int hSize, int wSize, int symmetry);
+
+  //Applies a symmetry to a location
+  Loc getSymLoc(int x, int y, const Board& board, int symmetry);
+  Loc getSymLoc(Loc loc, const Board& board, int symmetry);
+  Loc getSymLoc(int x, int y, int xSize, int ySize, int symmetry);
+  Loc getSymLoc(Loc loc, int xSize, int ySize, int symmetry);
+
+  //Applies a symmetry to a board
+  Board getSymBoard(const Board& board, int symmetry);
+
+  //Get the inverse of the specified symmetry
+  int invert(int symmetry);
+  //Get the symmetry equivalent to first applying firstSymmetry and then applying nextSymmetry.
+  int compose(int firstSymmetry, int nextSymmetry);
+  int compose(int firstSymmetry, int nextSymmetry, int nextNextSymmetry);
+
+  inline bool isTranspose(int symmetry) { return (symmetry & 0x4) != 0; }
+  inline bool isFlipX(int symmetry) { return (symmetry & 0x2) != 0; }
+  inline bool isFlipY(int symmetry) { return (symmetry & 0x1) != 0; }
+
+  //Fill isSymDupLoc with true on all but one copy of each symmetrically equivalent move, and false everywhere else.
+  //isSymDupLocs should be an array of size Board::MAX_ARR_SIZE
+  //If onlySymmetries is not NULL, will only consider the symmetries specified there.
+  //validSymmetries will be filled with all symmetries of the current board, including using history for checking ko/superko and some encore-related state.
+  //This implementation is dependent on specific order of the symmetries (i.e. transpose is coded as 0x4)
+  //Will pretend moves that have a nonzero value in avoidMoves do not exist.
+  void markDuplicateMoveLocs(
+    const Board& board,
+    const BoardHistory& hist,
+    const std::vector<int>* onlySymmetries,
+    const std::vector<int>& avoidMoves,
+    bool* isSymDupLoc,
+    std::vector<int>& validSymmetries
+  );
+
+// For each symmetry, return a metric about the "amount" of difference that board would have with other
+// if symmetry were applied to board.
+  void getSymmetryDifferences(
+    const Board& board, const Board& other, double maxDifferenceToReport, double symmetryDifferences[NUM_SYMMETRIES]
+  );
 }
 
 //Utility functions for computing the "scoreValue", the unscaled utility of various numbers of points, prior to multiplication by
@@ -166,10 +224,12 @@ namespace ScoreValue {
   double whiteScoreDrawAdjust(double finalWhiteMinusBlackScore, double drawEquivalentWinsForWhite, const BoardHistory& hist);
 
   //The unscaled utility of achieving a certain score difference
-  double whiteScoreValueOfScoreSmooth(double finalWhiteMinusBlackScore, double center, double scale, double drawEquivalentWinsForWhite, const Board& b, const BoardHistory& hist);
-  double whiteScoreValueOfScoreSmoothNoDrawAdjust(double finalWhiteMinusBlackScore, double center, double scale, const Board& b);
+  double whiteScoreValueOfScoreSmooth(double finalWhiteMinusBlackScore, double center, double scale, double drawEquivalentWinsForWhite, double sqrtBoardArea, const BoardHistory& hist);
+  double whiteScoreValueOfScoreSmoothNoDrawAdjust(double finalWhiteMinusBlackScore, double center, double scale, double sqrtBoardArea);
   //Approximately invert whiteScoreValueOfScoreSmooth
-  double approxWhiteScoreOfScoreValueSmooth(double scoreValue, double center, double scale, const Board& b);
+  double approxWhiteScoreOfScoreValueSmooth(double scoreValue, double center, double scale, double sqrtBoardArea);
+  //The derviative of whiteScoreValueOfScoreSmoothNoDrawAdjust with respect to finalWhiteMinusBlackScore.
+  double whiteDScoreValueDScoreSmoothNoDrawAdjust(double finalWhiteMinusBlackScore, double center, double scale, double sqrtBoardArea);
 
   //Compute what the scoreMeanSq should be for a final game result
   //It is NOT simply the same as finalWhiteMinusBlackScore^2 because for integer komi we model it as a distribution where with the appropriate probability
@@ -178,7 +238,10 @@ namespace ScoreValue {
 
   //The expected unscaled utility of the final score difference, given the mean and stdev of the distribution of that difference,
   //assuming roughly a normal distribution.
-  double expectedWhiteScoreValue(double whiteScoreMean, double whiteScoreStdev, double center, double scale, const Board& b);
+  double expectedWhiteScoreValue(double whiteScoreMean, double whiteScoreStdev, double center, double scale, double sqrtBoardArea);
+
+  //Get the standard deviation of score given the E(score) and E(score^2)
+  double getScoreStdev(double scoreMeanAvg, double scoreMeanSqAvg);
 }
 
 #endif  // NEURALNET_NNINPUTS_H_

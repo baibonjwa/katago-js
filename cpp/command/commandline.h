@@ -7,11 +7,12 @@
 #include <tclap/CmdLine.h>
 
 class KataHelpOutput;
+class Logger;
 
 class KataGoCommandLine : public TCLAP::CmdLine
 {
   TCLAP::ValueArg<std::string>* modelFileArg;
-  TCLAP::ValueArg<std::string>* configFileArg;
+  TCLAP::MultiArg<std::string>* configFileArg;
   TCLAP::MultiArg<std::string>* overrideConfigArg;
   std::string defaultConfigFileName;
   int numBuiltInArgs;
@@ -23,13 +24,18 @@ class KataGoCommandLine : public TCLAP::CmdLine
 
   static std::string defaultGtpConfigFileName();
 
+  void parseArgs(const std::vector<std::string>& args);
+  
   //Args added AFTER calling this will only show up in the long help output, and not the short usage line.
   void setShortUsageArgLimit();
 
   void addModelFileArg();
   //Empty string indicates no default or no example
   void addConfigFileArg(const std::string& defaultConfigFileName, const std::string& exampleConfigFile);
+  void addConfigFileArg(const std::string& defaultConfigFileName, const std::string& exampleConfigFile, bool required);
   void addOverrideConfigArg();
+
+  void logOverrides(Logger& logger) const;
 
   std::string getModelFile() const;
   bool modelFileIsDefault() const;
@@ -38,7 +44,7 @@ class KataGoCommandLine : public TCLAP::CmdLine
   void getConfigAllowEmpty(ConfigParser& cfg) const;
 
  private:
-  std::string getConfigFile() const;
+  std::vector<std::string> getConfigFiles() const;
   void maybeApplyOverrideConfigArg(ConfigParser& cfg) const;
 };
 

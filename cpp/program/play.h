@@ -5,6 +5,7 @@
 #include "../core/global.h"
 #include "../core/multithread.h"
 #include "../core/rand.h"
+#include "../core/threadsafecounter.h"
 #include "../core/threadsafequeue.h"
 #include "../dataio/trainingwrite.h"
 #include "../dataio/sgf.h"
@@ -21,9 +22,10 @@ struct InitialPosition {
   bool isPlainFork;
   bool isSekiFork;
   bool isHintFork;
+  double trainingWeight;
 
   InitialPosition();
-  InitialPosition(const Board& board, const BoardHistory& hist, Player pla, bool isPlainFork, bool isSekiFork, bool isHintFork);
+  InitialPosition(const Board& board, const BoardHistory& hist, Player pla, bool isPlainFork, bool isSekiFork, bool isHintFork, double trainingWeight);
   ~InitialPosition();
 };
 
@@ -43,11 +45,12 @@ struct ForkData {
 
 struct ExtraBlackAndKomi {
   int extraBlack = 0;
-  float komi = 7.5;
-  float komiBase = 7.5;
+  float komiMean = 7.5f;
+  float komiStdev = 7.5f;
   bool makeGameFair = false;
   bool makeGameFairForEmptyBoard = false;
   bool allowInteger = true;
+  bool interpZero = false;
 };
 
 struct OtherGameProperties {
@@ -60,6 +63,8 @@ struct OtherGameProperties {
   int hintTurn = -1;
   Hash128 hintPosHash;
   Loc hintLoc = Board::NULL_LOC;
+
+  double trainingWeight = 1.0;
 
   //Note: these two behave slightly differently than the ones in searchParams - as properties for the whole
   //game, they make the playouts *actually* vary instead of only making the neural net think they do.
@@ -108,7 +113,11 @@ class GameInitializer {
   Rules createRules();
   bool isAllowedBSize(int xSize, int ySize);
 
-  std::vector<int> getAllowedBSizes() const;
+  std::vector<std::pair<int,int>> getAllowedBSizes() const;
+  int getMinBoardXSize() const;
+  int getMinBoardYSize() const;
+  int getMaxBoardXSize() const;
+  int getMaxBoardYSize() const;
 
  private:
   void initShared(ConfigParser& cfg, Logger& logger);
@@ -135,10 +144,8 @@ class GameInitializer {
   std::vector<int> allowedScoringRules;
   std::vector<int> allowedTaxRules;
 
-  std::vector<int> allowedBSizes;
+  std::vector<std::pair<int,int>> allowedBSizes;
   std::vector<double> allowedBSizeRelProbs;
-
-  double allowRectangleProb;
 
   float komiMean;
   float komiStdev;
@@ -149,6 +156,10 @@ class GameInitializer {
   double sgfCompensateKomiProb;
   double komiBigStdevProb;
   float komiBigStdev;
+  double komiBiggerStdevProb;
+  float komiBiggerStdev;
+  double handicapKomiInterpZeroProb;
+  double sgfKomiInterpZeroProb;
   bool komiAuto;
 
   int numExtraBlackFixed;
@@ -162,6 +173,11 @@ class GameInitializer {
   std::vector<Sgf::PositionSample> hintPoses;
   std::vector<double> hintPosCumProbs;
   double hintPosesProb;
+
+  int minBoardXSize;
+  int minBoardYSize;
+  int maxBoardXSize;
+  int maxBoardYSize;
 };
 
 
@@ -175,18 +191,8 @@ class MatchPairer {
     const std::vector<std::string>& botNames,
     const std::vector<NNEvaluator*>& nnEvals,
     const std::vector<SearchParams>& baseParamss,
-    bool forSelfPlay,
-    bool forGateKeeper
-  );
-  MatchPairer(
-    ConfigParser& cfg,
-    int numBots,
-    const std::vector<std::string>& botNames,
-    const std::vector<NNEvaluator*>& nnEvals,
-    const std::vector<SearchParams>& baseParamss,
-    bool forSelfPlay,
-    bool forGateKeeper,
-    const std::vector<bool>& excludeBot
+    const std::vector<std::pair<int,int>>& matchupsPerRound,
+    int64_t numGamesTotal
   );
 
   ~MatchPairer();
@@ -210,23 +216,17 @@ class MatchPairer {
   );
 
  private:
-  int numBots;
-  std::vector<std::string> botNames;
-  std::vector<NNEvaluator*> nnEvals;
-  std::vector<SearchParams> baseParamss;
+  const int numBots;
+  const std::vector<std::string> botNames;
+  const std::vector<NNEvaluator*> nnEvals;
+  const std::vector<SearchParams> baseParamss;
+  const std::vector<std::pair<int,int>> matchupsPerRound;
 
-  std::vector<bool> excludeBot;
-  std::vector<int> secondaryBots;
-  std::vector<int> blackPriority;
   std::vector<std::pair<int,int>> nextMatchups;
-  std::vector<std::pair<int,int>> nextMatchupsBuf;
   Rand rand;
 
-  int matchRepFactor;
-  int repsOfLastMatchup;
-
   int64_t numGamesStartedSoFar;
-  int64_t numGamesTotal;
+  const int64_t numGamesTotal;
   int64_t logGamesEvery;
 
   std::mutex getMatchupMutex;
@@ -245,7 +245,8 @@ namespace Play {
     const std::string& searchRandSeed,
     bool doEndGameIfAllPassAlive, bool clearBotBeforeSearch,
     Logger& logger, bool logSearchInfo, bool logMoves,
-    int maxMovesPerGame, std::vector<std::atomic<bool>*>& stopConditions,
+    int maxMovesPerGame, const std::function<bool()>& shouldStop,
+    const WaitableFlag* shouldPause,
     const PlaySettings& playSettings, const OtherGameProperties& otherGameProps,
     Rand& gameRand,
     std::function<NNEvaluator*()> checkForNewNNEval,
@@ -259,7 +260,8 @@ namespace Play {
     Search* botB, Search* botW,
     bool doEndGameIfAllPassAlive, bool clearBotBeforeSearch,
     Logger& logger, bool logSearchInfo, bool logMoves,
-    int maxMovesPerGame, std::vector<std::atomic<bool>*>& stopConditions,
+    int maxMovesPerGame, const std::function<bool()>& shouldStop,
+    const WaitableFlag* shouldPause,
     const PlaySettings& playSettings, const OtherGameProperties& otherGameProps,
     Rand& gameRand,
     std::function<NNEvaluator*()> checkForNewNNEval,
@@ -308,6 +310,7 @@ public:
 
   //Will return NULL if stopped before the game completes. The caller is responsible for freeing the data
   //if it isn't NULL.
+  //afterInitialization can be used to run any post-initialization configuration on the search
   FinishedGameData* runGame(
     const std::string& seed,
     const MatchPairer::BotSpec& botSpecB,
@@ -315,10 +318,11 @@ public:
     ForkData* forkData,
     const Sgf::PositionSample* startPosSample,
     Logger& logger,
-    std::vector<std::atomic<bool>*>& stopConditions,
+    const std::function<bool()>& shouldStop,
+    const WaitableFlag* shouldPause,
     std::function<NNEvaluator*()> checkForNewNNEval,
-    std::function<void(const Board&, const BoardHistory&, Player, Loc, const std::vector<double>&, const std::vector<double>&, const std::vector<double>&, const Search*)> onEachMove,
-    bool alwaysIncludeOwnership
+    std::function<void(const MatchPairer::BotSpec&, Search*)> afterInitialization,
+    std::function<void(const Board&, const BoardHistory&, Player, Loc, const std::vector<double>&, const std::vector<double>&, const std::vector<double>&, const Search*)> onEachMove
   );
 
   const GameInitializer* getGameInitializer() const;

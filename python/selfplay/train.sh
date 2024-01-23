@@ -1,11 +1,11 @@
 #!/bin/bash -eu
 set -o pipefail
 {
-#Runs tensorflow training in $BASEDIR/train/$TRAININGNAME
-#Should be run once per persistent training process.
-#Outputs results in tfsavedmodels_toexport/ in an ongoing basis (EXPORTMODE == "main").
-#Or, to tfsavedmodels_toexport_extra/ (EXPORTMODE == "extra").
-#Or just trains without exporting (EXPORTMODE == "trainonly").
+# Runs training in $BASEDIR/train/$TRAININGNAME
+# Should be run once per persistent training process.
+# Outputs results in torchmodels_toexport/ in an ongoing basis (EXPORTMODE == "main").
+# Or, to torchmodels_toexport_extra/ (EXPORTMODE == "extra").
+# Or just trains without exporting (EXPORTMODE == "trainonly").
 
 if [[ $# -lt 5 ]]
 then
@@ -28,54 +28,57 @@ shift
 EXPORTMODE="$1"
 shift
 
-GITROOTDIR="$(git rev-parse --show-toplevel)"
-
 #------------------------------------------------------------------------------
 set -x
 
 mkdir -p "$BASEDIR"/train/"$TRAININGNAME"
-git show --no-patch --no-color > "$BASEDIR"/train/"$TRAININGNAME"/version.txt
-git diff --no-color > "$BASEDIR"/train/"$TRAININGNAME"/diff.txt
-git diff --staged --no-color > "$BASEDIR"/train/"$TRAININGNAME"/diffstaged.txt
 
-# For archival and logging purposes - you can look back and see exactly the python code on a particular date
-DATE_FOR_FILENAME=$(date "+%Y%m%d-%H%M%S")
-DATED_ARCHIVE="$BASEDIR"/scripts/train/dated/"$DATE_FOR_FILENAME"
-mkdir -p "$DATED_ARCHIVE"
-cp "$GITROOTDIR"/python/*.py "$GITROOTDIR"/python/selfplay/train.sh "$DATED_ARCHIVE"
-git show --no-patch --no-color > "$DATED_ARCHIVE"/version.txt
-git diff --no-color > "$DATED_ARCHIVE"/diff.txt
-git diff --staged --no-color > "$DATED_ARCHIVE"/diffstaged.txt
+if [[ -n $(pwd | grep "^$BASEDIR/scripts/") ]]
+then
+    echo "Already running out of snapshotted scripts directory, not snapshotting again"
+else
+    GITROOTDIR="$(git rev-parse --show-toplevel)"
 
+    git show --no-patch --no-color > "$BASEDIR"/train/"$TRAININGNAME"/version.txt
+    git diff --no-color > "$BASEDIR"/train/"$TRAININGNAME"/diff.txt
+    git diff --staged --no-color > "$BASEDIR"/train/"$TRAININGNAME"/diffstaged.txt
+
+    # For archival and logging purposes - you can look back and see exactly the python code on a particular date
+    DATE_FOR_FILENAME=$(date "+%Y%m%d-%H%M%S")
+    DATED_ARCHIVE="$BASEDIR"/scripts/train/dated/"$DATE_FOR_FILENAME"
+    mkdir -p "$DATED_ARCHIVE"
+    cp "$GITROOTDIR"/python/*.py "$GITROOTDIR"/python/selfplay/train.sh "$DATED_ARCHIVE"
+    git show --no-patch --no-color > "$DATED_ARCHIVE"/version.txt
+    git diff --no-color > "$DATED_ARCHIVE"/diff.txt
+    git diff --staged --no-color > "$DATED_ARCHIVE"/diffstaged.txt
+    cd "$DATED_ARCHIVE"
+fi
 
 if [ "$EXPORTMODE" == "main" ]
 then
-    EXPORT_SUBDIR=tfsavedmodels_toexport
+    EXPORT_SUBDIR=torchmodels_toexport
     EXTRAFLAG=""
 elif [ "$EXPORTMODE" == "extra" ]
 then
-    EXPORT_SUBDIR=tfsavedmodels_toexport_extra
+    EXPORT_SUBDIR=torchmodels_toexport_extra
     EXTRAFLAG=""
 elif [ "$EXPORTMODE" == "trainonly" ]
 then
-    EXPORT_SUBDIR=tfsavedmodels_toexport_extra
+    EXPORT_SUBDIR=torchmodels_toexport_extra
     EXTRAFLAG="-no-export"
 else
     echo "EXPORTMODE was not 'main' or 'extra' or 'trainonly', run with no arguments for usage"
     exit 1
 fi
 
-time python3 "$GITROOTDIR"/python/train.py \
+time python3 ./train.py \
      -traindir "$BASEDIR"/train/"$TRAININGNAME" \
      -datadir "$BASEDIR"/shuffleddata/current/ \
      -exportdir "$BASEDIR"/"$EXPORT_SUBDIR" \
      -exportprefix "$TRAININGNAME" \
      -pos-len 19 \
      -batch-size "$BATCHSIZE" \
-     -gpu-memory-frac 0.6 \
      -model-kind "$MODELKIND" \
-     -sub-epochs 4 \
-     -swa-sub-epoch-scale 4 \
      $EXTRAFLAG \
      "$@" \
      2>&1 | tee -a "$BASEDIR"/train/"$TRAININGNAME"/stdout.txt

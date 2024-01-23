@@ -538,7 +538,8 @@ Illegal: (0,0) X
     {
       const char* name = "Spight ko rules";
       Board board(baseBoard);
-      board.setStone(Location::getLoc(2,3,board.x_size),C_BLACK);
+      bool suc = board.setStone(Location::getLoc(2,3,board.x_size),C_BLACK);
+      testAssert(suc);
       Rules rules(baseRules);
       rules.koRule = Rules::KO_SPIGHT;
       BoardHistory hist(board,P_BLACK,rules,0);
@@ -2356,6 +2357,7 @@ HASH: 75819B78E08D44EFCA4C3CBC9D277E29
 Initial pla Black
 Encore phase 1
 Turns this phase 0
+Approx valid turns this phase 0
 Rules koPOSITIONALscoreTERRITORYtaxNONEsui0komi0.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 1
@@ -2375,6 +2377,7 @@ HASH: 75819B78E08D44EFCA4C3CBC9D277E29
 Initial pla Black
 Encore phase 1
 Turns this phase 1
+Approx valid turns this phase 1
 Rules koPOSITIONALscoreTERRITORYtaxNONEsui0komi0.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 1
@@ -2394,6 +2397,7 @@ HASH: 75819B78E08D44EFCA4C3CBC9D277E29
 Initial pla Black
 Encore phase 2
 Turns this phase 0
+Approx valid turns this phase 0
 Rules koPOSITIONALscoreTERRITORYtaxNONEsui0komi0.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 1
@@ -2413,6 +2417,7 @@ HASH: 75819B78E08D44EFCA4C3CBC9D277E29
 Initial pla Black
 Encore phase 2
 Turns this phase 1
+Approx valid turns this phase 1
 Rules koPOSITIONALscoreTERRITORYtaxNONEsui0komi0.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 1
@@ -2432,6 +2437,7 @@ HASH: 75819B78E08D44EFCA4C3CBC9D277E29
 Initial pla Black
 Encore phase 2
 Turns this phase 2
+Approx valid turns this phase 2
 Rules koPOSITIONALscoreTERRITORYtaxNONEsui0komi0.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 1
@@ -2454,6 +2460,7 @@ HASH: 75819B78E08D44EFCA4C3CBC9D277E29
 Initial pla Black
 Encore phase 0
 Turns this phase 2
+Approx valid turns this phase 1
 Rules koPOSITIONALscoreTERRITORYtaxNONEsui0komi0.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 1
@@ -2473,6 +2480,7 @@ HASH: 75819B78E08D44EFCA4C3CBC9D277E29
 Initial pla Black
 Encore phase 0
 Turns this phase 3
+Approx valid turns this phase 1
 Rules koPOSITIONALscoreTERRITORYtaxNONEsui0komi0.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 1
@@ -2492,6 +2500,7 @@ HASH: 75819B78E08D44EFCA4C3CBC9D277E29
 Initial pla Black
 Encore phase 0
 Turns this phase 4
+Approx valid turns this phase 1
 Rules koPOSITIONALscoreTERRITORYtaxNONEsui0komi0.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 1
@@ -3414,7 +3423,7 @@ HASH: 5C26A060FA78FD93FFF559C72BD7C6A4
     Board board;
     BoardHistory hist;
     Player nextPla = P_BLACK;
-    int turnIdxToSetup = sgf->moves.size();
+    int turnIdxToSetup = (int)sgf->moves.size();
     Rules initialRules = sgf->getRulesOrFailAllowUnspecified(Rules());
 
     sgf->setupBoardAndHistAssumeLegal(initialRules, board, nextPla, hist, turnIdxToSetup);
@@ -3438,6 +3447,7 @@ HASH: EB867913318513FD9DE98EDE86AE8CE0
 Initial pla Black
 Encore phase 2
 Turns this phase 14
+Approx valid turns this phase 14
 Rules koSIMPLEscoreTERRITORYtaxSEKIsui1komi7.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 1
@@ -3474,6 +3484,8 @@ XXXXXXXXXXXX
     out << endl;
 
     expect(name,out,expected);
+
+    delete sgf;
   }
 
   {
@@ -3768,6 +3780,7 @@ HASH: 6CC6F6B94B2F52DED5CA2B28C2D58357
 Initial pla White
 Encore phase 1
 Turns this phase 5
+Approx valid turns this phase 5
 Rules koSITUATIONALscoreTERRITORYtaxNONEsui0komi6.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score -1
@@ -3881,6 +3894,7 @@ HASH: FDD9D2ACBB4B3A6466BD37C59487F4F7
 Initial pla White
 Encore phase 1
 Turns this phase 5
+Approx valid turns this phase 5
 Rules koSITUATIONALscoreTERRITORYtaxNONEsui0komi6.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score -2
@@ -4211,6 +4225,7 @@ HASH: 5082A5AA1512BAD190D4C8951B76C472
 Initial pla Black
 Encore phase 1
 Turns this phase 6
+Approx valid turns this phase 6
 Rules koSIMPLEscoreTERRITORYtaxALLsui1komi6.5
 Ko recap block hash 6785AE217D0AAA7AD4FA074F6C3B370B
 White bonus score 3
@@ -4548,6 +4563,7 @@ HASH: F0D2D61BE0FABC60F06563748284EA95
 Initial pla Black
 Encore phase 1
 Turns this phase 14
+Approx valid turns this phase 14
 Rules koSIMPLEscoreTERRITORYtaxALLsui1komi6.5
 Ko recap block hash B442956CD0B349EA467256E307990942
 White bonus score 4
@@ -4684,6 +4700,7 @@ HASH: 7E612069F9D69EAEEEAADC4E30CF728B
 Initial pla Black
 Encore phase 2
 Turns this phase 5
+Approx valid turns this phase 5
 Rules koSIMPLEscoreTERRITORYtaxALLsui1komi6.5
 Ko recap block hash B8D94C36535B1329F3E635C5794FEEA9
 White bonus score 4
@@ -4909,6 +4926,7 @@ HASH: 677629FFD07EEF1B0E2EA53AD5DC28BC
 Initial pla Black
 Encore phase 1
 Turns this phase 9
+Approx valid turns this phase 9
 Rules koSIMPLEscoreTERRITORYtaxALLsui1komi6.5
 Ko recap block hash 6DF578E5C17193F2108E72E5D4BA22A5
 White bonus score 6
@@ -5039,6 +5057,7 @@ HASH: 5082A5AA1512BAD190D4C8951B76C472
 Initial pla Black
 Encore phase 2
 Turns this phase 4
+Approx valid turns this phase 4
 Rules koSIMPLEscoreTERRITORYtaxALLsui1komi6.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 4
@@ -5169,6 +5188,7 @@ HASH: C5436F2F449C44F2032BE90BF82BCFC6
 Initial pla Black
 Encore phase 2
 Turns this phase 4
+Approx valid turns this phase 4
 Rules koSIMPLEscoreTERRITORYtaxALLsui1komi6.5
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 4
@@ -5186,18 +5206,18 @@ Last moves pass pass pass pass H7 G9 F9 H7
   {
     const char* name = "Brute force testing of ko hash table";
     vector<Rules> rules = {
-      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_NONE, false, false, Rules::WHB_ZERO, 1.0f),
-      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_NONE, false, true, Rules::WHB_ZERO, 3.0f),
-      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_AREA, Rules::TAX_NONE, true, false, Rules::WHB_N, 5.5f),
-      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_SEKI, false, false, Rules::WHB_ZERO, 1.0f),
-      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_SEKI, true, false, Rules::WHB_N_MINUS_ONE, 4.5f),
-      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_NONE, true, true, Rules::WHB_ZERO, 6.5f),
-      Rules(Rules::KO_SIMPLE, Rules::SCORING_TERRITORY, Rules::TAX_SEKI, false, true, Rules::WHB_ZERO, 2.0f),
-      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_SEKI, true, true, Rules::WHB_N_MINUS_ONE, 5.5f),
-      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_ALL, true, false, Rules::WHB_N, 2.5f),
-      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_ALL, false, true, Rules::WHB_ZERO, 3.0f),
-      Rules(Rules::KO_POSITIONAL, Rules::SCORING_TERRITORY, Rules::TAX_ALL, false, true, Rules::WHB_ZERO, 4.0f),
-      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_ALL, true, false, Rules::WHB_N, 6.5f),
+      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_NONE, false, false, Rules::WHB_ZERO, false, 1.0f),
+      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_NONE, false, true, Rules::WHB_ZERO, false, 3.0f),
+      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_AREA, Rules::TAX_NONE, true, false, Rules::WHB_N, false, 5.5f),
+      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_SEKI, false, false, Rules::WHB_ZERO, false, 1.0f),
+      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_SEKI, true, false, Rules::WHB_N_MINUS_ONE, false, 4.5f),
+      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_NONE, true, true, Rules::WHB_ZERO, false, 6.5f),
+      Rules(Rules::KO_SIMPLE, Rules::SCORING_TERRITORY, Rules::TAX_SEKI, false, true, Rules::WHB_ZERO, false, 2.0f),
+      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_SEKI, true, true, Rules::WHB_N_MINUS_ONE, false, 5.5f),
+      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_ALL, true, false, Rules::WHB_N, false, 2.5f),
+      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_ALL, false, true, Rules::WHB_ZERO, false, 3.0f),
+      Rules(Rules::KO_POSITIONAL, Rules::SCORING_TERRITORY, Rules::TAX_ALL, false, true, Rules::WHB_ZERO, false, 4.0f),
+      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_ALL, true, false, Rules::WHB_N, false, 6.5f),
     };
     Rand baseRand(name);
 
@@ -5281,18 +5301,18 @@ Last moves pass pass pass pass H7 G9 F9 H7
   {
     //const char* name = "Test some roundtripping of rules strings";
     vector<Rules> rules = {
-      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_NONE, false, false, Rules::WHB_ZERO, 1.0f),
-      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_NONE, false, true, Rules::WHB_ZERO, 3.0f),
-      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_AREA, Rules::TAX_NONE, true, false, Rules::WHB_ZERO, 5.5f),
-      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_SEKI, false, false, Rules::WHB_ZERO, 1.0f),
-      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_SEKI, true, false, Rules::WHB_N, 4.5f),
-      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_NONE, true, true, Rules::WHB_N, 6.5f),
-      Rules(Rules::KO_SIMPLE, Rules::SCORING_TERRITORY, Rules::TAX_SEKI, false, true, Rules::WHB_ZERO, 2.0f),
-      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_SEKI, true, true, Rules::WHB_ZERO, 5.5f),
-      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_ALL, true, false, Rules::WHB_N_MINUS_ONE, 2.5f),
-      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_ALL, false, true, Rules::WHB_ZERO, 3.0f),
-      Rules(Rules::KO_POSITIONAL, Rules::SCORING_TERRITORY, Rules::TAX_ALL, false, true, Rules::WHB_N_MINUS_ONE, 4.0f),
-      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_ALL, true, false, Rules::WHB_N, 6.5f),
+      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_NONE, false, false, Rules::WHB_ZERO, false, 1.0f),
+      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_NONE, false, true, Rules::WHB_ZERO, true, 3.0f),
+      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_AREA, Rules::TAX_NONE, true, false, Rules::WHB_ZERO, false, 5.5f),
+      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_SEKI, false, false, Rules::WHB_ZERO, false, 1.0f),
+      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_SEKI, true, false, Rules::WHB_N, true, 4.5f),
+      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_NONE, true, true, Rules::WHB_N, true, 6.5f),
+      Rules(Rules::KO_SIMPLE, Rules::SCORING_TERRITORY, Rules::TAX_SEKI, false, true, Rules::WHB_ZERO, false, 2.0f),
+      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_SEKI, true, true, Rules::WHB_ZERO, true, 5.5f),
+      Rules(Rules::KO_SIMPLE, Rules::SCORING_AREA, Rules::TAX_ALL, true, false, Rules::WHB_N_MINUS_ONE, false, 2.5f),
+      Rules(Rules::KO_POSITIONAL, Rules::SCORING_AREA, Rules::TAX_ALL, false, true, Rules::WHB_ZERO, true, 3.0f),
+      Rules(Rules::KO_POSITIONAL, Rules::SCORING_TERRITORY, Rules::TAX_ALL, false, true, Rules::WHB_N_MINUS_ONE, false, 4.0f),
+      Rules(Rules::KO_SITUATIONAL, Rules::SCORING_TERRITORY, Rules::TAX_ALL, true, false, Rules::WHB_N, false, 6.5f),
     };
 
     for(int i = 0; i<rules.size(); i++) {
@@ -5323,6 +5343,16 @@ Last moves pass pass pass pass H7 G9 F9 H7
       testAssert(suc);
       testAssert(rules[i] == parsed5);
     }
+  }
+
+  {
+    const char* name = "Rules parsing bug";
+    Rules parsed = Rules::parseRules("komi23taxALL");
+    out << parsed << endl;
+    string expected = R"%%(
+koPOSITIONALscoreAREAtaxALLsui1komi23
+)%%";
+    expect(name,out,expected);
   }
 
 }

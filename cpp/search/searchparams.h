@@ -18,11 +18,37 @@ struct SearchParams {
   double cpuctExploration;  //Constant factor on exploration, should also scale up linearly with magnitude of utility
   double cpuctExplorationLog; //Constant factor on log-scaling exploration, should also scale up linearly with magnitude of utility
   double cpuctExplorationBase; //Scale of number of visits at which log behavior starts having an effect
+
+  double cpuctUtilityStdevPrior;
+  double cpuctUtilityStdevPriorWeight;
+  double cpuctUtilityStdevScale;
+
   double fpuReductionMax;   //Max amount to reduce fpu value for unexplore children
   double fpuLossProp; //Scale fpu this proportion of the way towards assuming a move is a loss.
+
+  bool fpuParentWeightByVisitedPolicy; //For fpu, blend between parent average and parent nn value based on proportion of policy visited.
+  double fpuParentWeightByVisitedPolicyPow; //If fpuParentWeightByVisitedPolicy, what power to raise the proportion of policy visited for blending.
   double fpuParentWeight; //For fpu, 0 = use parent average, 1 = use parent nn value, interpolates between.
-  double parentValueWeightFactor; //Scale the parent weight by this much relative to children in mcts
+
+  double policyOptimism; //Interpolate geometrically between raw policy and optimistic policy
+
+  //Tree value aggregation parameters
   double valueWeightExponent; //Amount to apply a downweighting of children with very bad values relative to good ones
+  bool useNoisePruning; //For computation of value, prune out weight that greatly exceeds what is justified by policy prior
+  double noisePruneUtilityScale; //The scale of the utility difference at which useNoisePruning has effect
+  double noisePruningCap; //Maximum amount of weight that noisePruning can remove
+
+  //Uncertainty weighting
+  bool useUncertainty; //Weight visits by uncertainty
+  double uncertaintyCoeff; //The amount of visits weight that an uncertainty of 1 utility is.
+  double uncertaintyExponent; //Visits weight scales inversely with this power of the uncertainty
+  double uncertaintyMaxWeight; //Add minimum uncertainty so that the most weight a node can have is this
+
+  //Graph search
+  bool useGraphSearch; //Enable graph search instead of tree search?
+  int graphSearchRepBound; //Rep bound to use for graph search transposition safety. Higher will reduce transpositions but be more safe.
+  double graphSearchCatchUpLeakProb; //Chance to perform a visit to deepen a branch anyways despite being behind on visit count.
+  //double graphSearchCatchUpProp; //When sufficiently far behind on visits on a transposition, catch up extra by adding up to this fraction of parents visits at once.
 
   //Root parameters
   bool rootNoiseEnabled;
@@ -34,9 +60,11 @@ struct SearchParams {
   double rootFpuReductionMax; //Same as fpuReductionMax, but at root
   double rootFpuLossProp; //Same as fpuLossProp, but at root
   int rootNumSymmetriesToSample; //For the root node, sample this many random symmetries (WITHOUT replacement) and average the results together.
-
+  bool rootSymmetryPruning; //For the root node, search only one copy of each symmetrically equivalent move.
   //We use the min of these two together, and also excess visits get pruned if the value turns out bad.
   double rootDesiredPerChildVisitsCoeff; //Funnel sqrt(this * policy prob * total visits) down any given child that receives any visits at all at the root
+
+  double rootPolicyOptimism; //Interpolate geometrically between raw policy and optimistic policy
 
   //Parameters for choosing the move to play
   double chosenMoveTemperature; //Make move roughly proportional to visit count ** (1/chosenMoveTemperature)
@@ -57,12 +85,22 @@ struct SearchParams {
   bool fillDameBeforePass; //When territory scoring, heuristically discourage passing before filling the dame.
   Player avoidMYTDaggerHackPla; //Hacky hack to avoid a particular pattern that gives some KG nets some trouble. Should become unnecessary in the future.
   double wideRootNoise; //Explore at the root more widely
+  bool enablePassingHacks; //Enable some hacks that mitigate rare instances when passing messes up deeper searches.
 
   double playoutDoublingAdvantage; //Play as if we have this many doublings of playouts vs the opponent
   Player playoutDoublingAdvantagePla; //Negate playoutDoublingAdvantage when making a move for the opponent of this player. If empty, opponent of the root player.
 
+  double avoidRepeatedPatternUtility; //Have the root player avoid repeating similar shapes, penalizing this much utility per instance.
+
   float nnPolicyTemperature; //Scale neural net policy probabilities by this temperature, applies everywhere in the tree
   bool antiMirror; //Enable anti-mirroring logic
+
+  //Ignore history prior to the root of the search. This is enforced strictly only for the root node of the
+  //search. Deeper nodes may see history prior to the root of the search if searches were performed from earlier positions
+  //and those gamestates were also reached by those earlier searches with the nn evals cached.
+  //This is true even without tree reuse.
+  bool ignorePreRootHistory;
+  bool ignoreAllHistory; //Always ignore history entirely
 
   double subtreeValueBiasFactor; //Dynamically adjust neural net utilties based on empirical stats about their errors in search
   int32_t subtreeValueBiasTableNumShards; //Number of shards for subtreeValueBiasFactor for initial hash lookup and mutexing
@@ -70,11 +108,12 @@ struct SearchParams {
   double subtreeValueBiasWeightExponent; //When computing empiricial bias, weight subtree results by childvisits to this power.
 
   //Threading-related
-  uint32_t mutexPoolSize; //Size of mutex pool for synchronizing access to all search nodes
-  int32_t numVirtualLossesPerThread; //Number of virtual losses for one thread to add
+  int nodeTableShardsPowerOfTwo; //Controls number of shards of node table for graph search transposition lookup
+  double numVirtualLossesPerThread; //Number of virtual losses for one thread to add
 
   //Asyncbot
   int numThreads; //Number of threads
+  double minPlayoutsPerThread; //If the number of playouts to perform per thread is smaller than this, cap the number of threads used.
   int64_t maxVisits; //Max number of playouts from the root to think for, counting earlier playouts from tree reuse
   int64_t maxPlayouts; //Max number of playouts from the root to think for, not counting earlier playouts from tree reuse
   double maxTime; //Max number of seconds to think for
@@ -107,8 +146,14 @@ struct SearchParams {
   SearchParams();
   ~SearchParams();
 
+  void printParams(std::ostream& out);
+
   //Params to use for testing, with some more recent values representative of more real use (as of Jan 2019)
   static SearchParams forTestsV1();
+  //Params to use for testing, with some more recent values representative of more real use (as of Mar 2022)
+  static SearchParams forTestsV2();
+
+  static SearchParams basicDecentParams();
 
   static void failIfParamsDifferOnUnchangeableParameter(const SearchParams& initial, const SearchParams& dynamic);
 };

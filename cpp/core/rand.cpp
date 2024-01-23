@@ -322,7 +322,7 @@ size_t Rand::nextIndexCumulative(const double* cumRelProbs, size_t n)
 {
   assert(n > 0);
   assert(n < 0xFFFFFFFF);
-  double_t sum = cumRelProbs[n-1];
+  double sum = cumRelProbs[n-1];
   double d = nextDouble(sum);
   size_t r = BSearch::findFirstGt(cumRelProbs,d,0,n);
   if(r == n)
@@ -369,6 +369,18 @@ double Rand::nextGamma(double a) {
   // u [0,1)
   // v > 0  < some large number
   // xx >= 0 < some large number
+}
+
+void Rand::fillShuffledUIntRange(size_t n, uint32_t* buf) {
+  if(n >= 0xFFFFffffu)
+    throw StringError("Rand::fillShuffledUIntRange: out of range value for n: " + Global::uint64ToString(n));
+  for(size_t i = 0; i < n; i++) {
+    buf[i] = (uint32_t)i;
+  }
+  for(size_t i = 1; i < n; i++) {
+    size_t r = (size_t)nextUInt(i+1);
+    std::swap(buf[i],buf[r]);
+  }
 }
 
 static void simpleTest()
@@ -501,6 +513,65 @@ void Rand::runTests() {
   simpleTest();
 
   ostringstream out;
+
+  {
+    const char* name = "Bit mixer tests";
+    out << Hash::murmurMix(12345) << endl;
+    out << Hash::murmurMix(298174913) << endl;
+    out << Hash::splitMix64(1234567) << endl;
+    out << Hash::splitMix64((uint64_t)1234567 + (uint64_t)0x9e3779b97f4a7c15ULL) << endl;
+    out << Global::uint64ToHexString(Hash::rrmxmx(0)) << endl;
+    out << Global::uint64ToHexString(Hash::rrmxmx(1)) << endl;
+    out << Global::uint64ToHexString(Hash::rrmxmx(0x0123456789abcdefULL)) << endl;
+    out << Global::uint64ToHexString(Hash::rrmxmx(0xfefefefefefefefeULL)) << endl;
+    out << Global::uint64ToHexString(Hash::nasam(0)) << endl;
+    out << Global::uint64ToHexString(Hash::nasam(1)) << endl;
+    out << Global::uint64ToHexString(Hash::nasam(0xfefefefefefefefeULL)) << endl;
+    string expected = R"%%(
+1716623506685013753
+8421665786179357259
+6457827717110365317
+3203168211198807973
+0000000000000000
+23085D6F7A569905
+C337A528D7E42497
+125C8836F02C998F
+0000000000000000
+9C1A051E07B9E10D
+3289B8F0A1EA039B
+)%%";
+    TestCommon::expect(name,out,expected);
+  }
+
+  for(int i = -10000; i<10000; i++) {
+    {
+      testAssert(i == Global::stringToInt(Global::intToString(i)));
+    }
+    {
+      int64_t x = (int64_t)i;
+      testAssert(x == Global::stringToInt64(Global::int64ToString(x)));
+    }
+    {
+      uint64_t x = (uint64_t)i;
+      testAssert(x == Global::stringToUInt64(Global::uint64ToString(x)));
+    }
+    {
+      uint64_t x = (uint64_t)i;
+      testAssert(x == Global::hexStringToUInt64(Global::uint64ToHexString(x)));
+    }
+    {
+      float x = (float)i / 100.0f;
+      testAssert(x == Global::stringToFloat(Global::floatToString(x)));
+    }
+    {
+      double x = (double)i / 100.0;
+      testAssert(x == Global::stringToDouble(Global::doubleToString(x)));
+    }
+    {
+      double x = (double)i / 1739.3;
+      testAssert(x == Global::stringToDouble(Global::doubleToStringHighPrecision(x)));
+    }
+  }
 
   {
     const char* name = "Rand tests";
@@ -1080,4 +1151,48 @@ Gamma(4.0) expected: Mean 4.000000 Variance 4.000000 Skew 1.000000 ExcessKurt 1.
     TestCommon::expect(name,out,expected);
   }
 
+  {
+    const char* name = "Shuffle tests";
+    Rand rand("shuffletest!");
+    std::vector<uint32_t> buf(32,99);
+    rand.fillShuffledUIntRange(16,buf.data()+8);
+    for(int i = 0; i<32; i++) {
+      out << buf[i] << endl;
+    }
+    string expected = R"%%(
+99
+99
+99
+99
+99
+99
+99
+99
+6
+9
+10
+11
+1
+15
+2
+12
+7
+14
+8
+4
+5
+13
+0
+3
+99
+99
+99
+99
+99
+99
+99
+99
+)%%";
+    TestCommon::expect(name,out,expected);
+  }
 }

@@ -13,17 +13,16 @@
 
 using namespace std;
 
-int MainCmds::tuner(int argc, const char* const* argv) {
+int MainCmds::tuner(const vector<string>& args) {
 #ifndef USE_OPENCL_BACKEND
   cout << "Currently this command only does anything for the OpenCL version of KataGo" << endl;
-  (void)argc;
-  (void)argv;
+  (void)args;
   return 0;
 #else
 
   ConfigParser cfg;
   string modelFile;
-  string outputFile;
+  string outputFileFromArg;
   string gpuIdxsStr;
   vector<int> gpuIdxs;
   int nnXLen;
@@ -75,10 +74,10 @@ int MainCmds::tuner(int argc, const char* const* argv) {
     cmd.add(fullArg);
     cmd.add(verboseErrorsArg);
     cmd.add(verboseTunerArg);
-    cmd.parse(argc,argv);
+    cmd.parseArgs(args);
 
     modelFile = cmd.getModelFile();
-    outputFile = outputFileArg.getValue();
+    outputFileFromArg = outputFileArg.getValue();
     gpuIdxsStr = gpuIdxsArg.getValue();
     nnXLen = nnXLenArg.getValue();
     nnYLen = nnYLenArg.getValue();
@@ -139,13 +138,14 @@ int MainCmds::tuner(int argc, const char* const* argv) {
 
   string homeDataDirOverride = Setup::loadHomeDataDirOverride(cfg);
 
-  Logger logger;
-  logger.setLogToStdout(true);
+  const bool logToStdoutDefault = true;
+  Logger logger(&cfg, logToStdoutDefault);
 
   logger.write("Loading model...");
   ModelDesc modelDesc;
   string expectedSha256 = "";
   ModelDesc::loadFromFileMaybeGZipped(modelFile, modelDesc, expectedSha256);
+  OpenCLTuner::ModelInfoForTuning modelInfo = OpenCLTuner::ModelInfoForTuning::ofDesc(&modelDesc);
 
   logger.write("Querying system devices...");
   vector<DeviceInfo> allDeviceInfos = DeviceInfo::getAllDeviceInfosOnSystem(&logger);
@@ -177,9 +177,13 @@ int MainCmds::tuner(int argc, const char* const* argv) {
     alreadyTunedNames.insert(device->info.name);
     cout << "Tuning device " << gpuIdx << ": " << device->info.name << endl;
 
-    if(outputFile == "") {
+    string outputFile;
+    if(outputFileFromArg == "") {
       string dir = OpenCLTuner::defaultDirectory(true,homeDataDirOverride);
-      outputFile = dir + "/" + OpenCLTuner::defaultFileName(device->info.name, nnXLen, nnYLen, &modelDesc);
+      outputFile = dir + "/" + OpenCLTuner::defaultFileName(device->info.name, nnXLen, nnYLen, modelInfo);
+    }
+    else {
+      outputFile = outputFileFromArg;
     }
 
     OpenCLTuneParams initialParams;
@@ -190,13 +194,14 @@ int MainCmds::tuner(int argc, const char* const* argv) {
     }
     catch(const StringError& e) {
       (void)e;
-      cout << "File does not alrady exist or unable to parse parameters in: " + outputFile << endl;
+      cout << "File does not already exist or unable to parse parameters in: " + outputFile << endl;
       cout << "Starting fresh tuning, saving results to " << outputFile << endl;
     }
 
     OpenCLTuneParams results;
     OpenCLTuner::tune(
       initialParams,
+      allDeviceInfos,
       devicesContext,
       gpuIdx,
       batchSize,
@@ -206,9 +211,10 @@ int MainCmds::tuner(int argc, const char* const* argv) {
       testFP16StorageMode,
       testFP16ComputeMode,
       testFP16TensorCoresMode,
-      &modelDesc,
+      modelInfo,
       full,
       winograd3x3TileSize,
+      &logger,
       cout,
       verboseErrors,
       verboseTuner,

@@ -1,5 +1,6 @@
 Running test for how a seki gets recorded
-: Cuda backend thread 0: Found GPU Tesla V100-SXM2-16GB memory 16945512448 compute capability major 7 minor 0
+: Initializing neural net buffer to be size 19 * 19 allowing smaller boards
+: Cuda backend thread 0: Found GPU NVIDIA RTX A5000 memory 25425608704 compute capability major 8 minor 6
 : Cuda backend thread 0: Model version 5 useFP16 = false useNHWC = false
 : Cuda backend thread 0: Model name: b6c96-s103408384-d26419149
 seedBase: abc
@@ -23,6 +24,7 @@ HASH: 2AE066C40DF5CAE139EFE3E7240C5D23
 Initial pla Black
 Encore phase 0
 Turns this phase 76
+Approx valid turns this phase 76
 Rules koSIMPLEscoreAREAtaxNONEsui0komi0
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 0
@@ -46,7 +48,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-0 1 0 -1 0.00241621 0.997584 0 -1.17312 0.00709901 0.992901 0 -1.50864 0.0200551 0.979945 0 -2.43693 0.074284 0.925716 0 -6.3224 -1 0 0.0220725 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 0 1 0 0 75 1 75 0 0 0 -0.947065 -5.43332 2.94597 30 0 0 1 
+0 1 0 -1 0.00241744 0.997583 0 -1.1731 0.00710262 0.992897 0 -1.50859 0.0200653 0.979935 0 -2.4368 0.0743219 0.925678 0 -6.3219 -1 0 0.022095 0 0 1 1 1 0 0 0.606095 2.9453 0.552665 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 0 1 0 0 75 1 75 0 0 0 -0.947039 -5.43388 2.9453 30 0 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -78,6 +80,7 @@ HASH: 9942C1270064011D1AE4EFE13F04B6F9
 Initial pla Black
 Encore phase 1
 Turns this phase 1
+Approx valid turns this phase 1
 Rules koSIMPLEscoreTERRITORYtaxNONEsui0komi12
 Ko recap block hash 00000000000000000000000000000000
 White bonus score -2
@@ -101,7 +104,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-0 1 0 -3 0.00182364 0.998176 0 -2.99389 0.00535799 0.994642 0 -2.98205 0.0151366 0.984863 0 -2.94928 0.056066 0.943934 0 -2.81215 -3 0 0.0125736 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 -10 0 0 0 0 1 0 0 1 0 0.373939 1.03837 0.83539 30 0 0 1 
+0 1 0 -3 0.0018183 0.998182 0 -2.9939 0.00534231 0.994658 0 -2.98208 0.0150923 0.984908 0 -2.94938 0.0559019 0.944098 0 -2.81251 -3 0 0.0125001 0 0 1 1 1 0 0 0.149336 0.83533 0 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 -10 0 0 0 0 1 0 0 1 0 0.370013 1.03236 0.83533 30 0 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -133,6 +136,7 @@ HASH: 2AE066C40DF5CAE139EFE3E7240C5D23
 Initial pla Black
 Encore phase 0
 Turns this phase 76
+Approx valid turns this phase 76
 Rules koSIMPLEscoreAREAtaxSEKIsui0komi0
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 0
@@ -156,7 +160,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-0.5 0.5 0 0 0.486153 0.513847 0 -0.205647 0.459316 0.540684 0 -0.604205 0.385066 0.614934 0 -1.70691 0.074284 0.925716 0 -6.3224 0 0 0.724936 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 0 1 0 0 75 1 75 0 0 0 -0.947065 -5.43332 2.94597 30 0 0 1 
+0.5 0.5 0 0 0.486154 0.513846 0 -0.20563 0.45932 0.54068 0 -0.604157 0.385076 0.614924 0 -1.70678 0.0743219 0.925678 0 -6.3219 0 0 0.724808 0 0 1 1 1 0 0 0.606095 2.9453 0.552665 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 0 1 0 0 75 1 75 0 0 0 -0.947039 -5.43388 2.9453 30 0 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -188,6 +192,7 @@ HASH: 9942C1270064011D1AE4EFE13F04B6F9
 Initial pla Black
 Encore phase 1
 Turns this phase 1
+Approx valid turns this phase 1
 Rules koSIMPLEscoreTERRITORYtaxSEKIsui0komi12
 Ko recap block hash 00000000000000000000000000000000
 White bonus score -2
@@ -211,7 +216,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-0 1 0 -3 0.00182364 0.998176 0 -2.99389 0.00535799 0.994642 0 -2.98205 0.0151366 0.984863 0 -2.94928 0.056066 0.943934 0 -2.81215 -3 0 0.0125736 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 -10 0 0 0 0 1 0 0 1 0 0.373939 1.03837 0.83539 30 0 0 1 
+0 1 0 -3 0.0018183 0.998182 0 -2.9939 0.00534231 0.994658 0 -2.98208 0.0150923 0.984908 0 -2.94938 0.0559019 0.944098 0 -2.81251 -3 0 0.0125001 0 0 1 1 1 0 0 0.149336 0.83533 0 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 -10 0 0 0 0 1 0 0 1 0 0.370013 1.03236 0.83533 30 0 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -243,6 +248,7 @@ HASH: 2AE066C40DF5CAE139EFE3E7240C5D23
 Initial pla Black
 Encore phase 0
 Turns this phase 76
+Approx valid turns this phase 76
 Rules koSIMPLEscoreAREAtaxALLsui0komi0
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 0
@@ -266,7 +272,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-0.5 0.5 0 0 0.486154 0.513846 0 -0.191609 0.459319 0.540681 0 -0.56296 0.385073 0.614927 0 -1.59039 0.0743104 0.92569 0 -5.89082 0 0 0.724846 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 0 1 0 0 75 1 75 0 0 0 -0.947065 -5.43332 2.94597 30 0 0 1 
+0.5 0.5 0 0 0.486155 0.513845 0 -0.191594 0.459322 0.540678 0 -0.562917 0.385083 0.614917 0 -1.59027 0.0743482 0.925652 0 -5.89036 0 0 0.724718 0 0 1 1 1 0 0 0.606095 2.9453 0.552665 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 0 1 0 0 75 1 75 0 0 0 -0.947039 -5.43388 2.9453 30 0 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -298,6 +304,7 @@ HASH: 9942C1270064011D1AE4EFE13F04B6F9
 Initial pla Black
 Encore phase 1
 Turns this phase 1
+Approx valid turns this phase 1
 Rules koSIMPLEscoreTERRITORYtaxALLsui0komi12
 Ko recap block hash 00000000000000000000000000000000
 White bonus score -2
@@ -321,7 +328,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-0 1 0 -5 0.00182116 0.998179 0 -4.9801 0.00535071 0.994649 0 -4.94153 0.015116 0.984884 0 -4.83481 0.0559898 0.94401 0 -4.38813 -5 0 0.0125394 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 -10 0 0 0 0 1 0 0 1 0 0.373939 1.03837 0.83539 30 0 0 1 
+0 1 0 -5 0.00181583 0.998184 0 -4.98011 0.00533503 0.994665 0 -4.94156 0.0150717 0.984928 0 -4.8349 0.0558257 0.944174 0 -4.38849 -5 0 0.012466 0 0 1 1 1 0 0 0.149336 0.83533 0 1 1 0 1 1 1 1 1 2.9786e+06 3.45079e+06 562425 3.7395e+06 3.07181e+06 485823 -10 0 0 0 0 1 0 0 1 0 0.370013 1.03236 0.83533 30 0 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -353,6 +360,7 @@ HASH: 452B5D971BCF17F15C7FDE4562BD0A78
 Initial pla Black
 Encore phase 0
 Turns this phase 112
+Approx valid turns this phase 112
 Rules koSIMPLEscoreAREAtaxNONEsui0komi0
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 0
@@ -376,7 +384,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-0.5 0.5 0 0 0.506308 0.493692 0 0.20744 0.518533 0.481467 0 0.609473 0.552358 0.447642 0 1.72179 0.693934 0.306066 0 6.37753 0 0 0.150442 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 0 1 0 0 111 1 111 0 0 0 0.428359 7.66009 1.6524 30 0 0 1 
+0.5 0.5 0 0 0.506308 0.493692 0 0.207714 0.518532 0.481468 0 0.610278 0.552355 0.447645 0 1.72407 0.693924 0.306076 0 6.38595 0 0 0.150426 0 0 1 1 1 0 0 0.296719 1.65097 0.46922 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 0 1 0 0 111 1 111 0 0 0 0.42787 7.65317 1.65097 30 0 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -408,6 +416,7 @@ HASH: 452B5D971BCF17F15C7FDE4562BD0A78
 Initial pla Black
 Encore phase 0
 Turns this phase 112
+Approx valid turns this phase 112
 Rules koSIMPLEscoreTERRITORYtaxNONEsui0komi0
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 0
@@ -431,7 +440,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-0.5 0.5 0 0 0.508818 0.491182 0 0.279916 0.525909 0.474091 0 0.822415 0.573195 0.426805 0 2.32337 0.771114 0.228886 0 8.60575 0 0 0.294011 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 1 0 0 0 111 1 111 0 0 0 0.907753 28.4004 1.356 30 -1 0 1 
+0.5 0.5 0 0 0.508819 0.491181 0 0.279764 0.52591 0.47409 0 0.821968 0.573197 0.426803 0 2.3221 0.771123 0.228877 0 8.60108 0 0 0.29403 0 0 1 1 1 0 0 0.250484 1.35571 0.459693 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 1 0 0 0 111 1 111 0 0 0 0.907129 28.381 1.35571 30 -1 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -463,6 +472,7 @@ HASH: 452B5D971BCF17F15C7FDE4562BD0A78
 Initial pla Black
 Encore phase 0
 Turns this phase 112
+Approx valid turns this phase 112
 Rules koSIMPLEscoreAREAtaxSEKIsui0komi0
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 0
@@ -486,7 +496,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-0.5 0.5 0 0 0.506308 0.493692 0 0.20744 0.518533 0.481467 0 0.609473 0.552358 0.447642 0 1.72179 0.693934 0.306066 0 6.37753 0 0 0.150442 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 0 1 0 0 111 1 111 0 0 0 0.428359 7.66009 1.6524 30 0 0 1 
+0.5 0.5 0 0 0.506308 0.493692 0 0.207714 0.518532 0.481468 0 0.610278 0.552355 0.447645 0 1.72407 0.693924 0.306076 0 6.38595 0 0 0.150426 0 0 1 1 1 0 0 0.296719 1.65097 0.46922 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 0 1 0 0 111 1 111 0 0 0 0.42787 7.65317 1.65097 30 0 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -518,6 +528,7 @@ HASH: 452B5D971BCF17F15C7FDE4562BD0A78
 Initial pla Black
 Encore phase 0
 Turns this phase 112
+Approx valid turns this phase 112
 Rules koSIMPLEscoreTERRITORYtaxSEKIsui0komi0
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 0
@@ -541,7 +552,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-0.5 0.5 0 0 0.508818 0.491182 0 0.279916 0.525909 0.474091 0 0.822415 0.573195 0.426805 0 2.32337 0.771114 0.228886 0 8.60575 0 0 0.294011 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 1 0 0 0 111 1 111 0 0 0 0.907753 28.4004 1.356 30 -1 0 1 
+0.5 0.5 0 0 0.508819 0.491181 0 0.279764 0.52591 0.47409 0 0.821968 0.573197 0.426803 0 2.3221 0.771123 0.228877 0 8.60108 0 0 0.29403 0 0 1 1 1 0 0 0.250484 1.35571 0.459693 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 1 0 0 0 111 1 111 0 0 0 0.907129 28.381 1.35571 30 -1 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -573,6 +584,7 @@ HASH: 452B5D971BCF17F15C7FDE4562BD0A78
 Initial pla Black
 Encore phase 0
 Turns this phase 112
+Approx valid turns this phase 112
 Rules koSIMPLEscoreAREAtaxALLsui0komi0
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 0
@@ -596,7 +608,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-1 0 0 2 0.990045 0.00995531 0 2.14239 0.970751 0.0292494 0 2.41834 0.917369 0.0826312 0 3.18184 0.693934 0.306066 0 6.37753 2 0 0.374706 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 0 1 0 0 111 1 111 0 0 0 0.428359 7.66009 1.6524 30 0 0 1 
+1 0 0 2 0.990044 0.00995564 0 2.14266 0.97075 0.0292504 0 2.41915 0.917366 0.082634 0 3.18411 0.693924 0.306076 0 6.38595 2 0 0.374731 0 0 1 1 1 0 0 0.296719 1.65097 0.46922 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 0 1 0 0 111 1 111 0 0 0 0.42787 7.65317 1.65097 30 0 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -628,6 +640,7 @@ HASH: 452B5D971BCF17F15C7FDE4562BD0A78
 Initial pla Black
 Encore phase 0
 Turns this phase 112
+Approx valid turns this phase 112
 Rules koSIMPLEscoreTERRITORYtaxALLsui0komi0
 Ko recap block hash 00000000000000000000000000000000
 White bonus score 0
@@ -651,7 +664,7 @@ policyTargetsNCMove
 
 globalTargetsNC
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'<f4','fortran_order':False,'shape':(1,64)}                                                                  
-1 0 0 2 0.992555 0.0074449 0 2.21486 0.978126 0.0218737 0 2.63128 0.938206 0.0617943 0 3.78341 0.771114 0.228886 0 8.60575 2 0 0.209555 0 0 1 1 1 0 0 0 0 0 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 1 0 0 0 111 1 111 0 0 0 0.907753 28.4004 1.356 30 -1 0 1 
+1 0 0 2 0.992555 0.00744462 0 2.21471 0.978127 0.0218728 0 2.63084 0.938208 0.0617919 0 3.78215 0.771123 0.228877 0 8.60108 2 0 0.209539 0 0 1 1 1 0 0 0.250484 1.35571 0.459693 1 1 0 1 1 1 1 1 794402 2.00896e+06 549276 3.26873e+06 1.02836e+06 505939 1 0 0 0 111 1 111 0 0 0 0.907129 28.381 1.35571 30 -1 0 2 
 
 scoreDistrN
 -109 78 85 77 80 89 1 0 -10 0 {'descr':'|i1','fortran_order':False,'shape':(1,458)}                                                                 
@@ -689,15 +702,15 @@ da.......
 dda.a....
 .d.......
 
-    W    W    W    W    W    W    W    W    W
     W    W    W    W    W    W    W    W  +98
     W    W    W    W    W    W    W    W  +98
+    W    W  +98    W    W    W    W    W  +98
     W    W    W    W    W    W    W    W  -98
     B    B    B    B    B    B    B    B    B
-  -98    B    B    B    B    B    B    B    B
-    B  -96    B    B    B    B    B    B    B
+  -97    B    B    B    B    B    B    B    B
+  -98  -97    B    B    B    B    B    B    B
   -97  -97    B    B    B    B    B    B    B
-  -98  -95    B    B    B    B    B    B    B
+  -98  -96    B    B    B    B    B    B    B
 
 Search assumes White first
 Rules koPOSITIONALscoreAREAtaxNONEsui1komi7.5
@@ -729,10 +742,10 @@ dda.a....
     W    W    W    W    W    W    W    W    W
     W    W    W    W    W    W    W    W    W
     B    B    B    B    B    B    B    B  +96
-    B    B    B    B    B    B    B    B    B
-    B    B    B    B    B    B    B    B    B
-  -98  -98    B    B    B    B    B    B    B
+  -98    B    B    B    B    B    B    B    B
+    B  -98    B    B    B    B    B    B    B
   -98  -97    B    B    B    B    B    B    B
+  -98  -96    B    B    B    B    B    B    B
 
 Search assumes White first
 Rules koPOSITIONALscoreAREAtaxNONEsui1komi7.5
@@ -759,15 +772,15 @@ aaaaa.a..
 aa.aa.aaa
 .aaaa.aa.
 
-  +16   +3  +47   -5  -72  -75  -42  -74  -50
-  +30  +50  +59  +77  +86  -68  -74  -74  -71
-    B    B    B    B  -98    W    W    W    W
-  -97  -97  -96  -95    B  +98  +98  +98  +97
-    B    B    B  -95  +93    W    W    W  +97
-  +59  +64  -98    B    B  +76    W  +98  +96
-  -17  +57  +68  +56    B  +84    W  +97  +96
-  -32  +46   +7  +57  -98  -83  -98  +97  +97
-  -15  -46  -41  +57  -98  -94  -98  -97  -57
+   +5   -5  +40  -11  -70  -73  -42  -72  -47
+  +21  +43  +55  +75  +85  -65  -71  -71  -70
+    B    B    B    B  -97    W    W    W    W
+  -97  -97  -95  -95    B  +97  +98  +98  +97
+    B    B    B  -94  +92    W  +98    W  +97
+  +66  +68  -98    B    B  +76    W  +97  +96
+   -5  +62  +73  +66    B  +83    W  +95  +95
+  -29  +58  +24  +68  -98  -82  -98  +95  +96
+  -16  -36  -24  +70  -98  -94  -98  -97  -58
 
 Search assumes White first
 Rules koSIMPLEscoreTERRITORYtaxSEKIsui0komi6.5
@@ -794,14 +807,16 @@ ddaaa.a..
 ad.da.aaa
 .aada.aa.
 
-  -28  -43   -9  -49  -79  -79  -65  -60  -52
-  -25   +0   +2  +21  +38  -75  -78  -88  -67
-    B    B    B    B  -98    W    W    W    W
-  -97  -97  -95  -92  -98  +41  +93  +95  +95
-    B    B    B  -88   +0    W  +94    W  +95
-  -11   +4    B    B    B  +25    W  +96  +94
-  -47   -9   +3   +7  -98  +56    W  +97  +94
-  -62  -22  -35   -4  -96  -51  -96  +98  +98
-  -55  -73  -67   +1  -98  -86  -95  -94  +10
+  -30  -46  -15  -47  -78  -78  -69  -63  -55
+  -28   -7   -8  +16  +33  -78  -80  -90  -69
+    B    B    B    B    B    W    W    W    W
+  -97  -96  -94  -89  -98  +44  +92  +95  +95
+    B    B    B  -83   +4    W  +94    W  +95
+   -7   +9    B    B  -98  +24    W  +95  +94
+  -44   -9   +9  +20  -98  +54    W  +97  +94
+  -54  -16  -29   +4  -96  -48  -94  +97  +98
+  -43  -68  -65  +11  -97  -85  -94  -92  +20
 
 ==============================================================
+: GPU 0 finishing, processed 775 rows 775 batches
+Done

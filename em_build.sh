@@ -1,7 +1,9 @@
 # use latest-upstream of emscripten
 pushd ${HOME}/OpenSources/emsdk
-version=2.0.29
+#version=2.0.29
 #version=2.0.30 # 動かない
+#version=3.1.53 # 動いた
+version=latest
 ./emsdk install $version
 ./emsdk activate $version
 source emsdk_env.sh

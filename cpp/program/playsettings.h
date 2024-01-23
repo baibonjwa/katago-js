@@ -12,8 +12,16 @@ struct PlaySettings {
   //Occasionally try some alternative moves and search the responses to them.
   double sidePositionProb;
 
+  //Temperature to use for placing handicap stones and for initializing the board position
+  double policyInitAreaTemperature;
+  double handicapTemperature;
+
   //Use this many visits in a short search to estimate the score, for adjusting komi
   int compensateKomiVisits;
+  //When NOT compensating komi, set the fair komi for white playing first rather than black playing first.
+  double flipKomiProbWhenNoCompensate;
+
+  //Use this many visits in a short search to estimate the score, for computing lead
   int estimateLeadVisits;
   //On each train position, estimate the lead in points with this probability
   double estimateLeadProb;
@@ -72,12 +80,21 @@ struct PlaySettings {
   double maxAsymmetricRatio;
   double minAsymmetricCompensateKomiProb; //Minimum probability to make game fair if asymmetric (other probs will also override)
 
+  //Dynamic komi for matches
+  double dynamicSelfKomiBonusMin;
+  double dynamicSelfKomiBonusMax;
+  double dynamicSelfKomiWinLossMin;
+  double dynamicSelfKomiWinLossMax;
+
+  //Record time taken per move
+  bool recordTimePerMove;
+
   PlaySettings();
   ~PlaySettings();
 
   static PlaySettings loadForMatch(ConfigParser& cfg);
   static PlaySettings loadForGatekeeper(ConfigParser& cfg);
-  static PlaySettings loadForSelfplay(ConfigParser& cfg);
+  static PlaySettings loadForSelfplay(ConfigParser& cfg, bool isDistributed);
 };
 
 #endif // PROGRAM_PLAYSETTINGS_H_
