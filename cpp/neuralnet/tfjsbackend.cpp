@@ -86,6 +86,18 @@ struct LoadedModel {
         modelDesc.numOwnershipChannels = 1;
         modelDesc.numScoreValueChannels = 2;
       }
+      if (modelDesc.modelVersion >= 12) {
+        // TODO JS側からpostProcessParamsの取得
+        /*
+        modelDesc.postProcessParams
+        modelDesc.postProcessParams.scoreMeanMultiplier = 
+        modelDesc.postProcessParams.scoreStdevMultiplier = 
+        modelDesc.postProcessParams.leadMultiplier = 
+        modelDesc.postProcessParams.varianceTimeMultiplier = 
+        modelDesc.postProcessParams.shorttermValueErrorMultiplier = 
+        modelDesc.postProcessParams.shorttermScoreErrorMultiplier = 
+        */
+      }
     }
   }
 
@@ -386,6 +398,7 @@ void NeuralNet::getOutput(
     //These are not actually correct, the client does the postprocessing to turn them into
     //policy probabilities and white game outcome probabilities
     //Also we don't fill in the nnHash here either
+    // TODO if(numPolicyChannels == 2) {...}
     SymmetryHelpers::copyOutputsWithSymmetry(policySrcBuf, policyProbs, 1, nnYLen, nnXLen, inputBufs[row]->symmetry);
     policyProbs[gpuHandle->policySize-1] = policySrcBuf[gpuHandle->policySize-1];
 
