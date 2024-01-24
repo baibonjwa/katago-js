@@ -70,12 +70,10 @@ class Output {
 
     callback(char) {
         if (char === 0 || char === 0x0a) {
-            if (this.buffer.length < 1000) {
-                const output = document.getElementById("output")
-                output.value += this.buffer + "\n";
-                document.getElementById("log").value += this.buffer + "\n";
-                output.dispatchEvent(new CustomEvent("message"));
-            }
+            const output = document.getElementById("output")
+            output.value += this.buffer + "\n";
+            document.getElementById("log").value += this.buffer + "\n";
+            output.dispatchEvent(new CustomEvent("message"));
             this.buffer = "";
             this.crFlag = false;
             return;
