@@ -5,14 +5,16 @@ KataGo powered by WebAssembly
 ### Convert a weight for TensorFlow.js
 
 ```sh
+# NOTE: The specifying branch is IMPORTANT.
+# NOTE: The below works on Apple Sicilon Mac. It does not work on Intel Mac.
+
+git clone -b browser_v1.8.0 https://github.com/y-ich/KataGo.git # This branch support TensorFlow KataGo weights.
+cd KataGo
 mkdir models
 cd models
-curl -OL https://github.com/lightvector/KataGo/releases/download/v1.1/g104-b6c96-s97778688-d23397744.zip
-unzip g104-b6c96-s97778688-d23397744.zip
+curl -OL https://media.katagotraining.org/uploaded/networks/zips/kata1/kata1-b6c96-s175395328-d26788732.zip
+unzip kata1-b6c96-s175395328-d26788732
 cd ../tfjs
-# in disposable Python environment
-pip install tensorflow==1.13.1
-make saved_model/saved_model.pb
 pipenv install
 pipenv shell
 make
@@ -22,7 +24,7 @@ cd ..
 ### Build
 
 ```sh
-source /your/path/emsdk_env.sh
+git checkout browser
 source em_build.sh
 ```
 
@@ -37,14 +39,6 @@ statikk --coi # or your favorite one liner server
 for auto detection of backend,
 ```
 http://127.0.0.1:8080/?config=gtp_auto.cfg&model=web_model
-```
-for CPU backend,
-```
-http://127.0.0.1:8080/?config=gtp_webgl.cfg&model=web_model
-```
-for WebGL backend (requiring OffscreenCanvas, i.e. Chrome 69 or later), 
-```
-http://127.0.0.1:8080/?config=gtp_cpu.cfg&model=web_model
 ```
 
 Enjoy!
