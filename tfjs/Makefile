@@ -1,5 +1,5 @@
 DISABLE_SYMMETRIES = true
-MODEL = g170-b6c96-s175395328-d26788732
+MODEL = kata1-b6c96-s175395328-d26788732
 # Specify target board size below.
 SIZE = 19
 #SIZE = 7
