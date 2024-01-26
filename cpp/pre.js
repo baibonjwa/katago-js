@@ -181,10 +181,11 @@ if (Module['ENVIRONMENT_IS_PTHREAD']) {
         );
         tf.wasm.setWasmPaths("/tfjs/");
     } else {
-        const version ="4.6.0";
+        const version ="4.16.0";
         importScripts(
             `//cdn.jsdelivr.net/npm/@tensorflow/tfjs@${version}/dist/tf.min.js`,
-            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`
+            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`,
+            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-webgpu.min.js`
         );
         tf.wasm.setWasmPaths(`//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/`);
     }
