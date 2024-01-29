@@ -185,7 +185,7 @@ if (Module['ENVIRONMENT_IS_PTHREAD']) {
         importScripts(
             `//cdn.jsdelivr.net/npm/@tensorflow/tfjs@${version}/dist/tf.min.js`,
             `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-wasm.min.js`,
-            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/tf-backend-webgpu.min.js`
+            `//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgpu@${version}/dist/tf-backend-webgpu.min.js`
         );
         tf.wasm.setWasmPaths(`//cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-wasm@${version}/dist/`);
     }
