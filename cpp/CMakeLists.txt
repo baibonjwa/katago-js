@@ -385,7 +385,7 @@ if(NOT USE_BACKEND STREQUAL "TFJS")
     message(SEND_ERROR "${ColorBoldRed}zlib was not found, if zlib is actually installed but not being found you can set ZLIB_INCLUDE_DIR to the directory with zlib.h and other headers, and ZLIB_LIBRARY to the compiled library 'libz.so' on Linux or 'libz.lib' on Windows. On the command line, this is -DZLIB_INCLUDE_DIR=... and -DZLIB_LIBRARY=... ${ColorReset}")
   endif(ZLIB_FOUND)
 else()
-include_directories(/Users/yuji/OpenSources/emscripten-ports/zlib)
+include_directories(/Users/baibonjwa/goproblems/emscripten-ports/zlib)
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s USE_ZLIB=1")
 endif()
 
