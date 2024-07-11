@@ -21,3 +21,15 @@ if [ "$1" = "clean" ]; then
 else
     emcmake cmake $src_dir -DBUILD_MCTS=1 -DUSE_BACKEND=TFJS && emmake make
 fi
+
+# Build ES Modules
+# if [ "$1" = "clean" ]; then
+#     emcmake cmake $src_dir -DBUILD_MCTS=1 -DUSE_BACKEND=TFJS \
+#         -DCMAKE_EXECUTABLE_SUFFIX=".js" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && \
+#     emmake make clean && \
+#     emmake make EMCC_FLAGS="-s MODULARIZE=1 -s EXPORT_ES6=1"
+# else
+#     emcmake cmake $src_dir -DBUILD_MCTS=1 -DUSE_BACKEND=TFJS \
+#         -DCMAKE_EXECUTABLE_SUFFIX=".js" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && \
+#     emmake make EMCC_FLAGS="-s MODULARIZE=1 -s EXPORT_ES6=1"
+# fi
