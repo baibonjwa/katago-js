@@ -107,8 +107,8 @@ if (!("arguments" in Module)) {
 }
 Module["preRun"].push(function () {
   const params = new URL(location).searchParams;
-  //   const cfgFile = params.get("config") || "gtp_auto.cfg";
-  const cfgFile = params.get("config") || "analysis_example.cfg";
+  const cfgFile = params.get("config") || "gtp_auto.cfg";
+  // const cfgFile = params.get("config") || "analysis_auto.cfg";
   FS.createPreloadedFile(
     FS.cwd(),
     cfgFile,
@@ -120,12 +120,12 @@ Module["preRun"].push(function () {
     Module["arguments"] = [];
   }
   Module["arguments"].push(params.get("subcommand") || "gtp");
+  // Module["arguments"].push(params.get("subcommand") || "analysis");
   Module["arguments"].push("-model");
   Module["arguments"].push(params.get("model") || "web_model");
   Module["arguments"].push("-config");
   Module["arguments"].push(cfgFile);
 
-  console.log(Module);
   const input = new Input();
   const output = new Output();
   FS.init(input.callback.bind(input), output.callback.bind(output), null);
