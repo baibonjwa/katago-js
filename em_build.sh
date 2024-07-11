@@ -2,8 +2,8 @@
 pushd ${HOME}/goproblems/emsdk
 #version=2.0.29
 #version=2.0.30 # 動かない
-#version=3.1.52 # 動いたが,condition_variable#wait_forが動かない
-version=latest
+version=3.1.52 # 動いたが,condition_variable#wait_forが動かない
+# version=latest
 ./emsdk install $version
 ./emsdk activate $version
 source emsdk_env.sh
