@@ -71,9 +71,13 @@ static int handleSubcommand(const string& subcommand, const vector<string>& args
 #if defined(__EMSCRIPTEN__)
   if(subcommand == "gtp")
     return MainCmds::gtp(subArgs);
-#else
   if(subcommand == "analysis")
     return MainCmds::analysis(subArgs);
+  if(subcommand == "version") {
+    cout << Version::getKataGoVersionFullInfo() << std::flush;
+    return 0;
+  }
+#else
   if(subcommand == "benchmark")
     return MainCmds::benchmark(subArgs);
   if(subcommand == "contribute")

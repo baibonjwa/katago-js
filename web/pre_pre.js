@@ -18,6 +18,7 @@ function testLoadsgf() {
 // status-  1: ready, -1: fail
 function katagoStatusHandler(status) {
   const command = document.getElementById("input").command;
+  console.log(status);
   switch (status) {
     case 1:
       command.removeAttribute("disabled");
@@ -106,7 +107,8 @@ if (!("arguments" in Module)) {
 }
 Module["preRun"].push(function () {
   const params = new URL(location).searchParams;
-  const cfgFile = params.get("config") || "gtp_auto.cfg";
+  //   const cfgFile = params.get("config") || "gtp_auto.cfg";
+  const cfgFile = params.get("config") || "analysis_example.cfg";
   FS.createPreloadedFile(
     FS.cwd(),
     cfgFile,
