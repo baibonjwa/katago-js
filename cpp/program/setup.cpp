@@ -85,6 +85,8 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
   string backendPrefix = "opencl";
   #elif defined(USE_EIGEN_BACKEND)
   string backendPrefix = "eigen";
+  #elif defined(USE_TFJS_BACKEND)
+  string backendPrefix = "tfjs";
   #else
   string backendPrefix = "dummybackend";
   #endif
@@ -302,6 +304,7 @@ vector<NNEvaluator*> Setup::initializeNNEvaluators(
     NNEvaluator* nnEval = new NNEvaluator(
       nnModelName,
       nnModelFile,
+      cfg,
       expectedSha256,
       &logger,
       nnMaxBatchSize,

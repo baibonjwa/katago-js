@@ -1,7 +1,7 @@
 #include "main.h"
 
-#include "core/os.h"
 #include "core/mainargs.h"
+#include "core/os.h"
 
 #ifdef NO_GIT_REVISION
 #define GIT_REVISION "<omitted>"
@@ -67,9 +67,17 @@ runsekitrainwritetests : Run some tests involving seki train output
 }
 
 static int handleSubcommand(const string& subcommand, const vector<string>& args) {
-  vector<string> subArgs(args.begin()+1,args.end());
+  vector<string> subArgs(args.begin() + 1, args.end());
+#if defined(__EMSCRIPTEN__)
+  if(subcommand == "gtp")
+    return MainCmds::gtp(subArgs);
   if(subcommand == "analysis")
     return MainCmds::analysis(subArgs);
+  if(subcommand == "version") {
+    cout << Version::getKataGoVersionFullInfo() << std::flush;
+    return 0;
+  }
+#else
   if(subcommand == "benchmark")
     return MainCmds::benchmark(subArgs);
   if(subcommand == "contribute")
@@ -79,7 +87,7 @@ static int handleSubcommand(const string& subcommand, const vector<string>& args
   else if(subcommand == "gatekeeper")
     return MainCmds::gatekeeper(subArgs);
   else if(subcommand == "genconfig")
-    return MainCmds::genconfig(subArgs,args[0]);
+    return MainCmds::genconfig(subArgs, args[0]);
   else if(subcommand == "gtp")
     return MainCmds::gtp(subArgs);
   else if(subcommand == "tuner")
@@ -160,6 +168,7 @@ static int handleSubcommand(const string& subcommand, const vector<string>& args
     cout << Version::getKataGoVersionFullInfo() << std::flush;
     return 0;
   }
+#endif
   else {
     cout << "Unknown subcommand: " << subcommand << endl;
     printHelp(args);
@@ -168,9 +177,8 @@ static int handleSubcommand(const string& subcommand, const vector<string>& args
   return 0;
 }
 
-
 int main(int argc, const char* const* argv) {
-  vector<string> args = MainArgs::getCommandLineArgsUTF8(argc,argv);
+  vector<string> args = MainArgs::getCommandLineArgsUTF8(argc, argv);
   MainArgs::makeCoutAndCerrAcceptUTF8();
 
   if(args.size() < 2) {
@@ -184,17 +192,15 @@ int main(int argc, const char* const* argv) {
   }
 
 #if defined(OS_IS_WINDOWS)
-  //On windows, uncaught exceptions reaching toplevel don't normally get printed out,
-  //so explicitly catch everything and print
+  // On windows, uncaught exceptions reaching toplevel don't normally get printed out,
+  // so explicitly catch everything and print
   int result;
   try {
     result = handleSubcommand(cmdArg, args);
-  }
-  catch(std::exception& e) {
+  } catch(std::exception& e) {
     cerr << "Uncaught exception: " << e.what() << endl;
     return 1;
-  }
-  catch(...) {
+  } catch(...) {
     cerr << "Uncaught exception that is not a std::exception... exiting due to unknown error" << endl;
     return 1;
   }
@@ -203,7 +209,6 @@ int main(int argc, const char* const* argv) {
   return handleSubcommand(cmdArg, args);
 #endif
 }
-
 
 string Version::getKataGoVersion() {
   return string("1.14.1");
