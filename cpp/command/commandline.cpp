@@ -14,6 +14,7 @@ using namespace std;
 static string getDefaultConfigPathForHelp(const string& defaultConfigFileName) {
   return HomeData::getDefaultFilesDirForHelpMessage() + "/" + defaultConfigFileName;
 }
+
 static vector<string> getDefaultConfigPaths(const string& defaultConfigFileName) {
   vector<string> v = HomeData::getDefaultFilesDirs();
   for(int i = 0; i<v.size(); i++) {
@@ -274,6 +275,7 @@ bool KataGoCommandLine::modelFileIsDefault() const {
 vector<string> KataGoCommandLine::getConfigFiles() const {
   assert(configFileArg != NULL);
   vector<string> configFiles = configFileArg->getValue();
+  #if !defined(__EMSCRIPTEN__)
   if(configFiles.empty() && !defaultConfigFileName.empty()) {
     string pathForErrMsg;
     try {
@@ -291,6 +293,7 @@ vector<string> KataGoCommandLine::getConfigFiles() const {
       pathForErrMsg = getDefaultConfigPathForHelp(defaultConfigFileName);
     throw StringError("-config CONFIG_FILE_NAME.cfg was not specified to tell KataGo where to find the config, and default was not found at " + pathForErrMsg);
   }
+  #endif
   return configFiles;
 }
 
