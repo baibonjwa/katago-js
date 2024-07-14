@@ -2,7 +2,9 @@
 
 #include <cmath>
 #include <fstream>
+#if !defined(USE_TFJS_BACKEND)
 #include <zlib.h>
+#endif
 
 #include "../core/global.h"
 #include "../core/fileutils.h"
@@ -1163,6 +1165,7 @@ struct NonCopyingStreamBuf : public std::streambuf
   }
 };
 
+#if !defined(USE_TFJS_BACKEND)
 void ModelDesc::loadFromFileMaybeGZipped(const string& fileName, ModelDesc& descBuf, const string& expectedSha256) {
   try {
     string lower = Global::toLower(fileName);
@@ -1224,7 +1227,7 @@ void ModelDesc::loadFromFileMaybeGZipped(const string& fileName, ModelDesc& desc
     throw StringError("Error loading or parsing model file " + fileName + ": " + e.what());
   }
 }
-
+#endif
 
 Rules ModelDesc::getSupportedRules(const Rules& desiredRules, bool& supported) const {
   static_assert(NNModelVersion::latestModelVersionImplemented == 14, "");

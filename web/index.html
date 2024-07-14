@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta http-equiv="origin-trial" content="AtpMJmoGR+cRXTyTtorSP5qeI+45OIY7Miu3/7IB8/HeiigfIEYtTO8kReM4y/tXdTg0TP4CO1RnqdN4MCdNmAYAAABKeyJvcmlnaW4iOiJodHRwOi8vbG9jYWxob3N0OjI1NDUwIiwiZmVhdHVyZSI6IldlYkdQVSIsImV4cGlyeSI6MTY5MTcxMTk5OX0=">
+    <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp">
+    <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
+    <title>KataGo</title>
+  </head>
+  <body>
+    <form id="input">
+        <input type="text" id="command" name="command" style="width:100%;" placeholder="starting KataGo..." disabled>
+        <!-- <input type="text" id="command" name="command" style="width:100%;"> -->
+    </form>
+    <textarea id="output" cols="30" rows="10" style="display:none;" placeholder="GTP output" disabled></textarea>
+    <textarea id="log" cols="30" rows="10" style="width:100%;" placeholder="GTP output" disabled></textarea>
+    <script type="text/javascript">
+    document.getElementById("output").addEventListener("message", function(event) {
+      // process anything you want with GTP output
+      event.currentTarget.value = "";
+    }, false);
+    </script>
+    <script src="pre_pre.js"></script>
+    <script async type="text/javascript" src="katago.js"></script>
+  </body>
+</html>

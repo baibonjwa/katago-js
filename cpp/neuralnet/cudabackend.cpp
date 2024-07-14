@@ -2130,6 +2130,7 @@ struct ComputeContext {
 
 ComputeContext* NeuralNet::createComputeContext(
   const std::vector<int>& gpuIdxs,
+  ConfigParser& cfg,
   Logger* logger,
   int nnXLen,
   int nnYLen,
@@ -2141,6 +2142,7 @@ ComputeContext* NeuralNet::createComputeContext(
   const LoadedModel* loadedModel
 ) {
   (void)gpuIdxs;
+  (void)cfg;
   (void)logger;
   (void)openCLTunerFile;
   (void)homeDataDirOverride;

@@ -15,6 +15,15 @@
 #include "../command/commandline.h"
 #include "../main.h"
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+
+extern "C" {
+  extern void notifyStatus(int);
+  extern void waitForStdin();
+}
+#endif
+
 using namespace std;
 
 static const vector<string> knownCommands = {
@@ -1910,9 +1919,21 @@ int MainCmds::gtp(const vector<string>& args) {
     cerr << "GTP ready, beginning main protocol loop" << endl;
   }
 
+  #if defined(__EMSCRIPTEN__)
+  while (engine->nnEval->status <= 1) {
+    emscripten_sleep(100);
+  }
+  notifyStatus(engine->nnEval->status == 2 ? 1 : -1);
+  #endif
+
   bool currentlyAnalyzing = false;
   string line;
-  while(getline(cin,line)) {
+  while(cin) {
+    #if defined(__EMSCRIPTEN__)
+    waitForStdin();
+    #endif
+    getline(cin,line);
+
     //Parse command, extracting out the command itself, the arguments, and any GTP id number for the command.
     string command;
     vector<string> pieces;

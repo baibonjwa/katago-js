@@ -203,6 +203,7 @@ NNEvaluator* TestSearchCommon::startNNEval(
   //bool debugSkipNeuralNet = false;
   bool openCLReTunePerBoardSize = false;
   const string& modelName = modelFile;
+  ConfigParser cfg;
   const string openCLTunerFile = "";
   const string homeDataDirOverride = "";
   int numNNServerThreadsPerModel = 1;
@@ -218,6 +219,7 @@ NNEvaluator* TestSearchCommon::startNNEval(
   NNEvaluator* nnEval = new NNEvaluator(
     modelName,
     modelFile,
+    cfg,
     expectedSha256,
     &logger,
     maxBatchSize,

@@ -80,6 +80,7 @@ class NNEvaluator {
   NNEvaluator(
     const std::string& modelName,
     const std::string& modelFileName,
+    ConfigParser& cfg,
     const std::string& expectedSha256,
     Logger* logger,
     int maxBatchSize,
@@ -179,6 +180,10 @@ class NNEvaluator {
   double averageProcessedBatchSize() const;
 
   void clearStats();
+
+  #if defined(__EMSCRIPTEN__)
+  int status = 0; // 0: init, 1: loading, 2: loaded, 3: failed
+  #endif
 
  private:
   const std::string modelName;
