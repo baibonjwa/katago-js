@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "statikk": "^2.2.0"
+  },
+  "scripts": {
+    "start": "npx statikk --coi"
+  }
+}
