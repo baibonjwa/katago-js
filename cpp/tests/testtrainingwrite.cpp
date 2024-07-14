@@ -14,6 +14,7 @@ static NNEvaluator* startNNEval(
   int defaultSymmetry, bool inputsUseNHWC, bool useNHWC, bool useFP16
 ) {
   const string& modelName = modelFile;
+  ConfigParser cfg;
   vector<int> gpuIdxByServerThread = {0};
   int maxBatchSize = 16;
   int nnXLen = NNPos::MAX_BOARD_LEN;
@@ -32,6 +33,7 @@ static NNEvaluator* startNNEval(
   NNEvaluator* nnEval = new NNEvaluator(
     modelName,
     modelFile,
+    cfg,
     expectedSha256,
     &logger,
     maxBatchSize,
