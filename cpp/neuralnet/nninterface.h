@@ -5,6 +5,7 @@
 #include "../core/commontypes.h"
 #include "../core/hash.h"
 #include "../core/logger.h"
+#include "../core/config_parser.h"
 #include "../neuralnet/desc.h"
 #include "../neuralnet/nninputs.h"
 
@@ -57,6 +58,7 @@ namespace NeuralNet {
     //The indices of all gpus that this context will be used for.
     //-1 as an entry indicates to select a default
     const std::vector<int>& gpuIdxs,
+    ConfigParser& cfg,
     Logger* logger,
     int nnXLen,
     int nnYLen,

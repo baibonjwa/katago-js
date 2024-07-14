@@ -51,6 +51,7 @@ NNServerBuf::~NNServerBuf() {
 NNEvaluator::NNEvaluator(
   const string& mName,
   const string& mFileName,
+  ConfigParser& cfg,
   const string& expectedSha256,
   Logger* lg,
   int maxBatchSz,
@@ -140,7 +141,7 @@ NNEvaluator::NNEvaluator(
     inputsVersion = NNModelVersion::getInputsVersion(modelVersion);
     postProcessParams = NeuralNet::getPostProcessParams(loadedModel);
     computeContext = NeuralNet::createComputeContext(
-      gpuIdxs,logger,nnXLen,nnYLen,
+      gpuIdxs,cfg,logger,nnXLen,nnYLen,
       openCLTunerFile,homeDataDirOverride,openCLReTunePerBoardSize,
       usingFP16Mode,usingNHWCMode,loadedModel
     );
@@ -340,10 +341,12 @@ void NNEvaluator::spawnServerThreads() {
     );
     serverThreads.push_back(thread);
   }
-
+  /*
+  // For emscripten, I guess that you need to finish current thread to start invoked threads.
   unique_lock<std::mutex> lock(bufferMutex);
   while(numServerThreadsStartingUp > 0)
     mainThreadWaitingForSpawn.wait(lock);
+  */
 }
 
 void NNEvaluator::killServerThreads() {
@@ -378,6 +381,9 @@ void NNEvaluator::serve(
   int64_t numRowsHandledThisThread = 0;
 
   ComputeHandle* gpuHandle = NULL;
+  #if defined(__EMSCRIPTEN__)
+  status = 1;
+  #endif
   if(loadedModel != NULL)
     gpuHandle = NeuralNet::createComputeHandle(
       computeContext,
@@ -390,6 +396,16 @@ void NNEvaluator::serve(
       serverThreadIdx
     );
 
+  #if defined(__EMSCRIPTEN__)
+  if (gpuHandle != NULL) {
+    status = 2;
+  } else {
+    status = 3;
+  }
+  #endif
+
+  /*
+  // see a comment in spawnServerThreads.
   {
     lock_guard<std::mutex> lock(bufferMutex);
     assert(serverThreadIdx < serverThreadsIsUsingFP16.size());
@@ -398,6 +414,7 @@ void NNEvaluator::serve(
     if(numServerThreadsStartingUp <= 0)
       mainThreadWaitingForSpawn.notify_all();
   }
+  */
 
   vector<NNResultBuf*> resultBufs;
   resultBufs.reserve(maxBatchSize);
