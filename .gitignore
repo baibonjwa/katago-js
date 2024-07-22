@@ -70,6 +70,7 @@ cpp/CMakeFiles/
 cpp/Makefile
 cpp/cmake_install.cmake
 em_build/
+em_build_es/
 
 .DS_Store
 GPATH

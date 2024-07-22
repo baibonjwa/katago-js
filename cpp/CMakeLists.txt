@@ -535,5 +535,9 @@ if(USE_BACKEND STREQUAL "TFJS")
     #set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s ASSERTIONS=1") # エラーが出たとき、詳しくは-s ASSERTIONS=1を付けろと出力されるが、これをつけると動いていたものさえ動かなくなる
 endif()
 
+if(MODULARIZE STREQUAL "1")
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s MODULARIZE=1 -s EXPORT_ES6=1")
+endif()
+
 target_include_directories(katago PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
 
