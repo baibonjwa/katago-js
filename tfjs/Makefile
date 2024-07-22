@@ -1,5 +1,7 @@
 DISABLE_SYMMETRIES = true
-MODEL = kata1-b6c96-s175395328-d26788732
+# MODEL = kata1-b20c256-s241116160-d150094945
+# MODEL = b10c128-s1141046784-d204142634
+MODEL = kata1-b18c384nbt-s9996604416-d4316597426
 # Specify target board size below.
 SIZE = 19
 #SIZE = 7
@@ -17,7 +19,7 @@ else
 	INPUT_NODES = swa_model/bin_inputs,swa_model/global_inputs
 endif
 OUTPUT_NODES = swa_model/policy_output,swa_model/value_output,swa_model/miscvalues_output,swa_model/ownership_output
-TARGET_DIR = web_model
+TARGET_DIR = web_model/${MODEL}
 TARGET = $(TARGET_DIR)/model.json
 
 all: $(TARGET)
