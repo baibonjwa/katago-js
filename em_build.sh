@@ -9,7 +9,7 @@ version=3.1.52 # 動いたが,condition_variable#wait_forが動かない
 source emsdk_env.sh
 popd
 
-# build_dir=em_build
+build_dir=em_build
 src_dir=../cpp
 
 if [ ! -d $build_dir ]; then
